@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -15,6 +16,20 @@ var ErrNotFound = errors.New("not found")
 // ErrDuplicatedKey is returned when a link with the same hostname+code already
 // exists. It wraps the driver's unique-violation error.
 var ErrDuplicatedKey = errors.New("duplicate key")
+
+// isDuplicateKey reports whether err is a unique-constraint violation. GORM
+// maps Postgres/MySQL driver errors to gorm.ErrDuplicatedKey; sqlite surfaces
+// them as raw constraint errors, so match the message too.
+func isDuplicateKey(err error) bool {
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") || strings.Contains(msg, "duplicate entry")
+}
 
 // LinkStore is the Postgres write model for links via GORM. Dialect-neutral:
 // the same model and queries work with the MySQL driver.
@@ -30,7 +45,7 @@ func (s *LinkStore) Migrate(ctx context.Context) error {
 
 func (s *LinkStore) Create(ctx context.Context, l *domain.Link) error {
 	err := s.db.WithContext(ctx).Create(l).Error
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
+	if isDuplicateKey(err) {
 		return ErrDuplicatedKey
 	}
 	return err

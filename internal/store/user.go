@@ -28,7 +28,7 @@ func (s *UserStore) Count(ctx context.Context) (int64, error) {
 
 func (s *UserStore) Create(ctx context.Context, u *domain.User) error {
 	err := s.db.WithContext(ctx).Create(u).Error
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
+	if isDuplicateKey(err) {
 		return ErrDuplicatedKey
 	}
 	return err

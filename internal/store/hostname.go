@@ -23,7 +23,7 @@ func (s *HostnameStore) Migrate(ctx context.Context) error {
 // Create registers a hostname. ErrDuplicatedKey if already registered.
 func (s *HostnameStore) Create(ctx context.Context, h *domain.Hostname) error {
 	err := s.db.WithContext(ctx).Create(h).Error
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
+	if isDuplicateKey(err) {
 		return ErrDuplicatedKey
 	}
 	return err
