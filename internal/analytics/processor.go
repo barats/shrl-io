@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/barats/shrl-io/internal/domain"
+	"github.com/barats/shrl-io/internal/geo"
 	"github.com/barats/shrl-io/internal/store"
 )
 
@@ -21,11 +22,19 @@ type Store interface {
 	ApplyAnalytics(ctx context.Context, dailies []store.DailyIncrement, lifetimes []store.LifetimeIncrement, breakdowns []store.BreakdownIncrement) error
 }
 
+// GeoResolver attributes a visitor's IP to a location. Satisfied by
+// *geo.Resolver; a nil Geo on the Processor disables location attribution
+// (all locations become "unknown").
+type GeoResolver interface {
+	Lookup(ip string) geo.Location
+}
+
 // Processor turns batches of stream events into analytics deltas and applies
 // them through the Store.
 type Processor struct {
 	Cache Cache
 	Store Store
+	Geo   GeoResolver
 	// Now is injectable for deterministic tests; defaults to time.Now.
 	Now func() time.Time
 }
@@ -106,11 +115,15 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 		lifetimes[lk] = l
 
 		device, os, browser := ClassifyUA(ua)
+		country, region, city := locationField(p.Geo, ip)
 		for dim, val := range map[string]string{
 			"referrer": ReferrerHost(referrer),
 			"device":   device,
 			"os":       os,
 			"browser":  browser,
+			"country":  country,
+			"region":   region,
+			"city":     city,
 		} {
 			bk := breakdownKey{day: day, hostname: hostname, code: code, dimension: dim, value: val}
 			b := breakdowns[bk]
@@ -145,6 +158,23 @@ func strVal(values map[string]interface{}, key string) string {
 		return ""
 	}
 	s, _ := v.(string)
+	return s
+}
+
+// locationField resolves a visit's IP to country/region/city, or "unknown"
+// each when no resolver is configured or the IP is unresolvable.
+func locationField(g GeoResolver, ip string) (string, string, string) {
+	if g == nil {
+		return "unknown", "unknown", "unknown"
+	}
+	loc := g.Lookup(ip)
+	return orUnknown(loc.Country), orUnknown(loc.Region), orUnknown(loc.City)
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
 	return s
 }
 

@@ -50,3 +50,9 @@ A `Visit` whose user-agent matches a known crawler or link-preview unfurler
 (e.g. Googlebot, Slackbot, WhatsApp). Filtered out of analytics rollups at
 aggregation time.
 _Avoid_: crawler, spider, robot
+
+**Location**:
+The geographic attribution of a `Visitor` — `country`, `region`, and `city`,
+derived from the visitor's IP at aggregation time. The IP itself is never
+stored; only the `Location` and aggregate counts are persisted.
+_Avoid_: geo, IP address

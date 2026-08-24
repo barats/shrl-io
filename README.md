@@ -104,6 +104,9 @@ The API `hostname` defaults to `SHRL_DEFAULT_HOSTNAME` (`localhost`), or pass
     curl -s "http://localhost:8081/links/{code}/analytics/breakdowns?hostname=localhost&dimension=referrer" \
       -H "X-API-Key: dev-admin-key"
 
-Dimensions: `referrer`, `device`, `os`, `browser`. Bots and link-preview
-unfurlers are excluded. Rollups are pruned after `SHRL_RETENTION_DAYS`
-(default 365); the lifetime visit total is never pruned.
+Dimensions: `referrer`, `device`, `os`, `browser`, `country`, `region`,
+`city`. Bots and link-preview unfurlers are excluded. Rollups are pruned after
+`SHRL_RETENTION_DAYS` (default 365); the lifetime visit total is never pruned.
+Country/region/city attribution is optional — set `SHRL_GEOLITE_LICENSE` (a
+free MaxMind account) to enable it; without it, locations report as `unknown`.
+Visitor IPs are never stored, only the derived location.

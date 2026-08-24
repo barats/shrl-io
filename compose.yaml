@@ -60,6 +60,10 @@ services:
       SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
       SHRL_REDIS_ADDR: redis:6379
       SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
+      SHRL_GEOLITE_LICENSE: ${SHRL_GEOLITE_LICENSE:-}
+      SHRL_GEOLITE_DB_PATH: /data/GeoLite2-City.mmdb
+    volumes:
+      - geodata:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,3 +73,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  geodata:

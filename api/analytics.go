@@ -8,7 +8,10 @@ import (
 	"github.com/barats/shrl-io/internal/domain"
 )
 
-var validDimensions = map[string]bool{"referrer": true, "device": true, "os": true, "browser": true}
+var validDimensions = map[string]bool{
+	"referrer": true, "device": true, "os": true, "browser": true,
+	"country": true, "region": true, "city": true,
+}
 
 // analyticsWindow returns the from/to date range for analytics reads,
 // defaulting to the retention window.
@@ -87,7 +90,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		dimension = "referrer"
 	}
 	if !validDimensions[dimension] {
-		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, or browser")
+		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, browser, country, region, or city")
 		return
 	}
 	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {

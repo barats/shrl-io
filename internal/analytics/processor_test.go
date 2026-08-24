@@ -8,8 +8,15 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/barats/shrl-io/internal/geo"
 	"github.com/barats/shrl-io/internal/store"
 )
+
+type fakeGeo struct {
+	loc geo.Location
+}
+
+func (f *fakeGeo) Lookup(ip string) geo.Location { return f.loc }
 
 type fakeCache struct {
 	seen map[string]bool
@@ -171,5 +178,84 @@ func TestApplyFailureUndoesDedup(t *testing.T) {
 	}
 	if len(fs.dailies) != 1 || fs.dailies[0].Uniques != 1 {
 		t.Errorf("after retry, uniques = %v, want 1", fs.dailies)
+	}
+}
+
+func breakdownValue(t *testing.T, bs []store.BreakdownIncrement, dim string) int64 {
+	t.Helper()
+	var n int64
+	for _, b := range bs {
+		if b.Dimension == dim {
+			n += b.Count
+		}
+	}
+	return n
+}
+
+func TestProcessMessagesLocationAttribution(t *testing.T) {
+	fs := &fakeStore{}
+	p := &Processor{
+		Cache: &fakeCache{},
+		Store: fs,
+		Geo:   &fakeGeo{loc: geo.Location{Country: "US", Region: "California", City: "San Francisco"}},
+		Now:   func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+	}
+	msgs := []redis.XMessage{
+		{ID: "1-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "8.8.8.8",
+			"user_agent": chromeUA(), "referrer": "https://google.com",
+			"ts": "2026-08-24T10:00:00Z",
+		}},
+	}
+	if err := p.ProcessMessages(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	if got := breakdownValue(t, fs.breakdowns, "country"); got != 1 {
+		t.Errorf("country breakdown count = %d, want 1", got)
+	}
+	byValue := map[string]string{}
+	for _, b := range fs.breakdowns {
+		if b.Count > 0 {
+			byValue[b.Dimension+"="+b.Value] = ""
+		}
+	}
+	if _, ok := byValue["country=US"]; !ok {
+		t.Errorf("missing country=US breakdown")
+	}
+	if _, ok := byValue["region=California"]; !ok {
+		t.Errorf("missing region=California breakdown")
+	}
+	if _, ok := byValue["city=San Francisco"]; !ok {
+		t.Errorf("missing city=San Francisco breakdown")
+	}
+}
+
+func TestProcessMessagesLocationUnknownWithoutGeo(t *testing.T) {
+	fs := &fakeStore{}
+	p := &Processor{
+		Cache: &fakeCache{},
+		Store: fs,
+		Now:   func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+	}
+	msgs := []redis.XMessage{
+		{ID: "1-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "10.0.0.5",
+			"user_agent": chromeUA(), "referrer": "",
+			"ts": "2026-08-24T10:00:00Z",
+		}},
+	}
+	if err := p.ProcessMessages(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	for _, dim := range []string{"country", "region", "city"} {
+		found := false
+		for _, b := range fs.breakdowns {
+			if b.Dimension == dim && b.Value == "unknown" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("dimension %q should be 'unknown' without a geo resolver", dim)
+		}
 	}
 }

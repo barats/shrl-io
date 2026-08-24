@@ -18,6 +18,7 @@ import (
 
 	"github.com/barats/shrl-io/internal/analytics"
 	"github.com/barats/shrl-io/internal/cache"
+	"github.com/barats/shrl-io/internal/geo"
 	"github.com/barats/shrl-io/internal/redisutil"
 	"github.com/barats/shrl-io/internal/store"
 )
@@ -76,6 +77,10 @@ func main() {
 	}
 
 	proc := &analytics.Processor{Cache: analyticsCache, Store: analyticsStore}
+	if resolver := setupGeo(ctx); resolver != nil {
+		proc.Geo = resolver
+		defer resolver.Close()
+	}
 
 	// Retention prune: at boot, then nightly.
 	go func() {
@@ -137,8 +142,47 @@ func processBatch(ctx context.Context, proc *analytics.Processor, ca *cache.Anal
 	return ca.AckVisits(ctx, ids)
 }
 
-func prune(ctx context.Context, st *store.AnalyticsStore, retentionDays int) {
-	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+// setupGeo enables GeoIP attribution if a database file is mounted or a
+// MaxMind license key is configured; otherwise geo is disabled and locations
+// are "unknown". When enabled it starts a periodic refresh.
+func setupGeo(ctx context.Context) *geo.Resolver {
+	dbPath := envOr("SHRL_GEOLITE_DB_PATH", "/data/GeoLite2-City.mmdb")
+	licenseKey := os.Getenv("SHRL_GEOLITE_LICENSE")
+
+	var r *geo.Resolver
+	switch {
+	case fileExists(dbPath):
+		r, _ = geo.Open(dbPath)
+	case licenseKey != "":
+		if err := geo.Ensure(ctx, dbPath, licenseKey); err == nil {
+			r, _ = geo.Open(dbPath)
+		} else {
+			log.Printf("geo: download failed: %v", err)
+		}
+	}
+	if r == nil {
+		log.Println("geo: disabled; locations will be 'unknown' (set SHRL_GEOLITE_LICENSE or mount a database)")
+		return nil
+	}
+	log.Printf("geo: enabled (%s)", dbPath)
+	go func() {
+		t := time.NewTicker(geo.UpdateInterval)
+		defer t.Stop()
+		for range t.C {
+			if err := geo.Update(ctx, dbPath, licenseKey); err != nil {
+				log.Printf("geo: update failed: %v", err)
+			}
+		}
+	}()
+	return r
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func prune(ctx context.Context, st *store.AnalyticsStore, retentionDays int) {	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 	cutoff = time.Date(cutoff.Year(), cutoff.Month(), cutoff.Day(), 0, 0, 0, 0, time.UTC)
 	if err := st.PruneAnalytics(ctx, cutoff); err != nil {
 		log.Printf("prune analytics: %v", err)
