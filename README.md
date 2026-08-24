@@ -13,7 +13,7 @@
 
 ## Overview
 
-**shrl.io** is a high-performance, self-hosted URL shortener and traffic analyzer designed for teams and individuals who want full control over their link data. Built with a microservices architecture, it offers fast redirects, real-time analytics, team collaboration, and enterprise-grade security.
+**shrl.io** is a privacy-first, high-performance, self-hosted URL shortener and traffic analyzer designed for teams and individuals who want full control over their link data. Built with a microservices architecture, it offers fast redirects, real-time analytics, team collaboration, and enterprise-grade security.
 
 ### Why shrl.io?
 
