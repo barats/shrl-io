@@ -13,7 +13,7 @@ import (
 const (
 	keyPrefix    = "link:"
 	visitStream  = "visits"
-	maxStreamLen = 100000
+	maxStreamLen = 1000000
 )
 
 // Key is the Redis key for a link's redirect mapping.

@@ -94,3 +94,16 @@ Then visit `http://localhost:8080/{code}` — you get a 302 to the destination.
 
 The API `hostname` defaults to `SHRL_DEFAULT_HOSTNAME` (`localhost`), or pass
 `?hostname=` / a `hostname` field to target another.
+
+### Analytics (worker aggregates visits from the Redis stream)
+
+    curl -s "http://localhost:8081/links/{code}/analytics?hostname=localhost" \
+      -H "X-API-Key: dev-admin-key"
+    curl -s "http://localhost:8081/links/{code}/analytics/timeseries?hostname=localhost" \
+      -H "X-API-Key: dev-admin-key"
+    curl -s "http://localhost:8081/links/{code}/analytics/breakdowns?hostname=localhost&dimension=referrer" \
+      -H "X-API-Key: dev-admin-key"
+
+Dimensions: `referrer`, `device`, `os`, `browser`. Bots and link-preview
+unfurlers are excluded. Rollups are pruned after `SHRL_RETENTION_DAYS`
+(default 365); the lifetime visit total is never pruned.

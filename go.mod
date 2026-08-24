@@ -3,6 +3,7 @@ module github.com/barats/shrl-io
 go 1.25.0
 
 require (
+	github.com/mileusna/useragent v1.3.5
 	github.com/redis/go-redis/v9 v9.22.0
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2

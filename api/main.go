@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type config struct {
 	redisAddr       string
 	adminKey        string
 	defaultHostname string
+	retentionDays   int
 	warmInterval    time.Duration
 }
 
@@ -37,6 +39,7 @@ func loadConfig() config {
 		redisAddr:       envOr("SHRL_REDIS_ADDR", "localhost:6379"),
 		adminKey:        os.Getenv("SHRL_ADMIN_KEY"),
 		defaultHostname: envOr("SHRL_DEFAULT_HOSTNAME", "localhost"),
+		retentionDays:   envInt("SHRL_RETENTION_DAYS", 365),
 		warmInterval:    5 * time.Minute,
 	}
 }
@@ -44,6 +47,15 @@ func loadConfig() config {
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }
@@ -62,12 +74,12 @@ func main() {
 	ctx := context.Background()
 
 	db := openPostgres(ctx, cfg.databaseURL)
-	if err := db.AutoMigrate(&domain.Link{}); err != nil {
+	st := store.New(db)
+	if err := st.Migrate(ctx); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 
 	rdb := redisutil.Connect(ctx, cfg.redisAddr)
-	st := store.New(db)
 	ca := cache.New(rdb)
 	s := &server{store: st, cache: ca, cfg: cfg}
 
@@ -88,6 +100,9 @@ func main() {
 	mux.HandleFunc("POST /links/{code}/disable", s.disableLink)
 	mux.HandleFunc("POST /links/{code}/enable", s.enableLink)
 	mux.HandleFunc("DELETE /links/{code}", s.deleteLink)
+	mux.HandleFunc("GET /links/{code}/analytics", s.getAnalytics)
+	mux.HandleFunc("GET /links/{code}/analytics/timeseries", s.getAnalyticsTimeseries)
+	mux.HandleFunc("GET /links/{code}/analytics/breakdowns", s.getAnalyticsBreakdowns)
 
 	log.Printf("api listening on %s", cfg.addr)
 	log.Fatal(http.ListenAndServe(cfg.addr, s.auth(mux)))

@@ -15,6 +15,8 @@ services:
 
   redis:
     image: docker.io/library/redis:7-alpine
+    volumes:
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -29,6 +31,7 @@ services:
       SHRL_REDIS_ADDR: redis:6379
       SHRL_ADMIN_KEY: ${SHRL_ADMIN_KEY:-dev-admin-key}
       SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
+      SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
       SHRL_API_ADDR: :8080
     ports:
       - "8081:8080"
@@ -54,10 +57,15 @@ services:
     build: .
     command: ["worker"]
     environment:
+      SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
       SHRL_REDIS_ADDR: redis:6379
+      SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
 volumes:
   pgdata:
+  redisdata:

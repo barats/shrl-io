@@ -21,7 +21,12 @@ type Store struct {
 func New(db *gorm.DB) *Store { return &Store{db: db} }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	return s.db.WithContext(ctx).AutoMigrate(&domain.Link{})
+	return s.db.WithContext(ctx).AutoMigrate(
+		&domain.Link{},
+		&domain.DailyStats{},
+		&domain.Breakdown{},
+		&domain.LifetimeStats{},
+	)
 }
 
 func (s *Store) Create(ctx context.Context, l *domain.Link) error {
