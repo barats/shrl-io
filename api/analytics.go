@@ -96,9 +96,10 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 	}
 	from, to := s.analyticsWindow(r)
 
-	limit := 20
+	// limit defaults to 10; 0 returns every distinct value.
+	limit := 10
 	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 10000 {
 			limit = n
 		}
 	}

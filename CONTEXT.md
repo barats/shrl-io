@@ -32,6 +32,12 @@ _Avoid_: hostname list, allowed domains
 The URL a `Link` redirects to.
 _Avoid_: target, long URL, original URL
 
+**Remark**:
+The optional note a `Creator` writes on a `Link` to remember what it does.
+Shown on the list and detail pages; editable after creation; never part of
+the short URL or the redirect.
+_Avoid_: note, description, memo, comment
+
 **Redirect**:
 The operation of sending a visitor from a `Link`'s short URL to its `Destination`.
 _Avoid_: forward, bounce

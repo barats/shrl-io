@@ -46,6 +46,8 @@ teams and individuals who want full control over their link data.
   from an unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code.
 - **Admin-managed hostnames**: an **Admin** registers **Hostnames**; Users
   select from the registry when creating a Link. A Code is unique per Hostname.
+- **Remark**: an optional note on a Link so you can remember what it does;
+  editable after creation.
 - **Full lifecycle**: create, list, get, update the Destination, disable,
   enable, or delete a Link.
 - **Disabled** Links return 404 from the redirector (reversible — the Link and
@@ -242,13 +244,13 @@ User sees only the Links they created.
 | GET    | `/me`                                  | The authenticated user                              |
 | GET    | `/users`                               | List users (admin only)                             |
 | POST   | `/users`                               | Create a user (admin only); password returned once  |
-| POST   | `/links`                               | Create a Link (Code is auto-generated)              |
+| POST   | `/links`                               | Create a Link (Code auto-generated; Remark optional) |
 | GET    | `/links`                               | List the current user's Links for a Hostname        |
 | GET    | `/hostnames`                           | List registered Hostnames (the registry)            |
 | POST   | `/hostnames`                           | Register a Hostname (admin only)                    |
 | DELETE | `/hostnames/{hostname}`                | Remove a Hostname from the registry (admin only)    |
 | GET    | `/links/{code}`                        | Get a Link                                          |
-| PATCH  | `/links/{code}`                        | Update a Link's Destination                         |
+| PATCH  | `/links/{code}`                        | Update a Link's Destination and Remark              |
 | POST   | `/links/{code}/disable`                | Disable a Link (redirector returns 404)             |
 | POST   | `/links/{code}/enable`                 | Enable a Link                                       |
 | DELETE | `/links/{code}`                        | Delete a Link                                       |
@@ -256,8 +258,8 @@ User sees only the Links they created.
 | GET    | `/links/{code}/analytics/timeseries`   | Daily visit buckets in the window, ascending        |
 | GET    | `/links/{code}/analytics/breakdowns`   | Top-N dimension values in the window                |
 
-A Link is a JSON object: `hostname`, `code`, `destination`, `disabled`,
-`created_by`, `created_at`, `updated_at`.
+A Link is a JSON object: `hostname`, `code`, `destination`, `remark`,
+`disabled`, `created_by`, `created_at`, `updated_at`.
 
 Query parameters:
 
@@ -267,13 +269,13 @@ Query parameters:
   retention window.
 - `dimension` (breakdowns) — one of the analytics dimensions, default
   `referrer`.
-- `limit` (breakdowns) — top-N, default `20`, max `100`.
+- `limit` (breakdowns) — top-N, default `10`; `0` returns all values.
 
 ## Terminology
 
 This project uses a precise domain vocabulary (Link, Code, Hostname,
-Destination, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete, User,
-Admin, Creator, Token, Password). See [`CONTEXT.md`](CONTEXT.md) for
+Destination, Remark, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete,
+User, Admin, Creator, Token, Password). See [`CONTEXT.md`](CONTEXT.md) for
 definitions and the words to avoid.
 
 ## Documentation

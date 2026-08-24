@@ -158,12 +158,17 @@ func (s *AnalyticsStore) GetTimeseries(ctx context.Context, hostname, code strin
 }
 
 // GetBreakdowns returns the top-N dimension values by count within a window.
+// A limit <= 0 returns every distinct value.
 func (s *AnalyticsStore) GetBreakdowns(ctx context.Context, hostname, code, dimension string, from, to time.Time, limit int) ([]BreakdownTotal, error) {
 	var totals []BreakdownTotal
-	err := s.db.WithContext(ctx).Model(&domain.Breakdown{}).
+	q := s.db.WithContext(ctx).Model(&domain.Breakdown{}).
 		Select("value, SUM(count) AS total").
 		Where("hostname = ? AND code = ? AND dimension = ? AND day >= ? AND day <= ?", hostname, code, dimension, from, to).
-		Group("value").Order("total DESC").Limit(limit).Scan(&totals).Error
+		Group("value").Order("total DESC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	err := q.Scan(&totals).Error
 	return totals, err
 }
 

@@ -218,6 +218,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Hostname    string `json:"hostname"`
 		Destination string `json:"destination"`
+		Remark      string `json:"remark"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -241,6 +242,11 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	remark, err := domain.NormalizeRemark(req.Remark)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	creator := currentUser(r).ID
 
 	for attempt := 0; attempt < 8; attempt++ {
@@ -249,7 +255,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "code generation failed")
 			return
 		}
-		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, CreatedBy: creator}
+		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, CreatedBy: creator}
 		if err := s.links.Create(r.Context(), l); err == nil {
 			s.linkCache.Put(r.Context(), l)
 			writeJSON(w, http.StatusCreated, l)
@@ -287,6 +293,7 @@ func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
 func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Destination string `json:"destination"`
+		Remark      string `json:"remark"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -297,11 +304,17 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	remark, err := domain.NormalizeRemark(req.Remark)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	l, ok := s.ownedLink(w, r, r.PathValue("code"))
 	if !ok {
 		return
 	}
 	l.Destination = dest
+	l.Remark = remark
 	if err := s.links.Save(r.Context(), l); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update link")
 		return

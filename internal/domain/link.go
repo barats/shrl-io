@@ -8,6 +8,7 @@ type Link struct {
 	Hostname    string    `json:"hostname" gorm:"primaryKey"`
 	Code        string    `json:"code" gorm:"primaryKey"`
 	Destination string    `json:"destination"`
+	Remark      string    `json:"remark"`
 	Disabled    bool      `json:"disabled"`
 	CreatedBy   int64     `json:"created_by" gorm:"index"`
 	CreatedAt   time.Time `json:"created_at"`
