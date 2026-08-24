@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"shrl.io/io-shrl/internal/domain"
+	"github.com/barats/shrl-io/internal/domain"
 )
 
 // ErrNotFound is returned when a link does not exist.

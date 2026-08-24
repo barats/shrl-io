@@ -1,4 +1,4 @@
-module shrl.io/io-shrl
+module github.com/barats/shrl-io
 
 go 1.25.0
 

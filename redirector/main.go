@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"shrl.io/io-shrl/internal/cache"
-	"shrl.io/io-shrl/internal/redisutil"
+	"github.com/barats/shrl-io/internal/cache"
+	"github.com/barats/shrl-io/internal/redisutil"
 )
 
 type config struct {

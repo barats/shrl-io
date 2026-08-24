@@ -15,10 +15,10 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"shrl.io/io-shrl/internal/cache"
-	"shrl.io/io-shrl/internal/domain"
-	"shrl.io/io-shrl/internal/redisutil"
-	"shrl.io/io-shrl/internal/store"
+	"github.com/barats/shrl-io/internal/cache"
+	"github.com/barats/shrl-io/internal/domain"
+	"github.com/barats/shrl-io/internal/redisutil"
+	"github.com/barats/shrl-io/internal/store"
 )
 
 type config struct {

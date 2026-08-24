@@ -37,6 +37,16 @@ The permanent removal of a `Link`. Its `Code` is never automatically reused.
 _Avoid_: remove, purge
 
 **Visit**:
-An event recorded on every redirect of a `Link`. Collected from day one; its
-aggregation into analytics is a later slice.
+An event recorded on every redirect of a `Link`.
 _Avoid_: click, hit
+
+**Visitor**:
+A unique `(Link, day, IP + user-agent)` bucket counted from `Visit` events.
+Identity is stored as a hash, never as raw IPs.
+_Avoid_: unique IP, device
+
+**Bot**:
+A `Visit` whose user-agent matches a known crawler or link-preview unfurler
+(e.g. Googlebot, Slackbot, WhatsApp). Filtered out of analytics rollups at
+aggregation time.
+_Avoid_: crawler, spider, robot

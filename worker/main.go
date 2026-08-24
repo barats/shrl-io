@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"shrl.io/io-shrl/internal/redisutil"
+	"github.com/barats/shrl-io/internal/redisutil"
 )
 
 func envOr(key, def string) string {

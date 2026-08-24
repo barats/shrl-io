@@ -7,7 +7,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"shrl.io/io-shrl/internal/domain"
+	"github.com/barats/shrl-io/internal/domain"
 )
 
 const (

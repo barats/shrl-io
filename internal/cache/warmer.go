@@ -3,7 +3,7 @@ package cache
 import (
 	"context"
 
-	"shrl.io/io-shrl/internal/domain"
+	"github.com/barats/shrl-io/internal/domain"
 )
 
 // LinkSource is what the warmer needs from the write side.
