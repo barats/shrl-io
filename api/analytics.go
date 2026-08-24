@@ -39,8 +39,7 @@ func parseDayParam(v string, def time.Time) time.Time {
 func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
-		writeStoreError(w, err)
+	if _, ok := s.ownedLink(w, r, code); !ok {
 		return
 	}
 	from, to := s.analyticsWindow(r)
@@ -55,19 +54,18 @@ func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"hostname":     hostname,
-		"code":         code,
-		"window_days":  s.cfg.retentionDays,
-		"lifetime":     map[string]int64{"visits": lifetime},
-		"window":       map[string]int64{"visits": visits, "unique_visitors": uniques},
+		"hostname":    hostname,
+		"code":        code,
+		"window_days": s.cfg.retentionDays,
+		"lifetime":    map[string]int64{"visits": lifetime},
+		"window":      map[string]int64{"visits": visits, "unique_visitors": uniques},
 	})
 }
 
 func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
-		writeStoreError(w, err)
+	if _, ok := s.ownedLink(w, r, code); !ok {
 		return
 	}
 	from, to := s.analyticsWindow(r)
@@ -93,8 +91,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, browser, country, region, or city")
 		return
 	}
-	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
-		writeStoreError(w, err)
+	if _, ok := s.ownedLink(w, r, code); !ok {
 		return
 	}
 	from, to := s.analyticsWindow(r)

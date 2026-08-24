@@ -48,9 +48,11 @@ func (s *LinkStore) Get(ctx context.Context, hostname, code string) (*domain.Lin
 	return &l, nil
 }
 
-func (s *LinkStore) List(ctx context.Context, hostname string) ([]domain.Link, error) {
+// List returns the links of one creator on a hostname, newest first.
+func (s *LinkStore) List(ctx context.Context, hostname string, creatorID int64) ([]domain.Link, error) {
 	var links []domain.Link
-	err := s.db.WithContext(ctx).Where("hostname = ?", hostname).
+	err := s.db.WithContext(ctx).
+		Where("hostname = ? AND created_by = ?", hostname, creatorID).
 		Order("created_at DESC").Find(&links).Error
 	return links, err
 }
@@ -60,6 +62,18 @@ func (s *LinkStore) ListActive(ctx context.Context) ([]domain.Link, error) {
 	var links []domain.Link
 	err := s.db.WithContext(ctx).Where("disabled = false").Find(&links).Error
 	return links, err
+}
+
+// ListHostnames returns every hostname on which the creator has a link, sorted.
+func (s *LinkStore) ListHostnames(ctx context.Context, creatorID int64) ([]string, error) {
+	var hostnames []string
+	err := s.db.WithContext(ctx).
+		Model(&domain.Link{}).
+		Where("created_by = ?", creatorID).
+		Distinct().
+		Order("hostname ASC").
+		Pluck("hostname", &hostnames).Error
+	return hostnames, err
 }
 
 func (s *LinkStore) Save(ctx context.Context, l *domain.Link) error {

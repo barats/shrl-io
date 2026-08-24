@@ -1,0 +1,110 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/barats/shrl-io/internal/domain"
+	"github.com/barats/shrl-io/internal/store"
+)
+
+type ctxKey int
+
+const userKey ctxKey = 0
+
+func currentUser(r *http.Request) *domain.User {
+	u, _ := r.Context().Value(userKey).(*domain.User)
+	return u
+}
+
+func bearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	if strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	return ""
+}
+
+func (s *server) authenticate(ctx context.Context, token string) (*domain.User, error) {
+	t, err := s.users.TokenByHash(ctx, domain.HashToken(token))
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().After(t.ExpiresAt) {
+		return nil, store.ErrNotFound
+	}
+	return s.users.GetByID(ctx, t.UserID)
+}
+
+// auth guards every route except login/logout with a bearer token.
+func (s *server) auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" || r.URL.Path == "/logout" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		token := bearerToken(r)
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		u, err := s.authenticate(r.Context(), token)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		ctx := context.WithValue(r.Context(), userKey, u)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (s *server) login(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	u, err := s.users.GetByUsername(r.Context(), req.Username)
+	if err != nil || !domain.VerifyPassword(u.PasswordHash, req.Password) {
+		writeError(w, http.StatusUnauthorized, "invalid username or password")
+		return
+	}
+	token, err := domain.GenerateToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "token generation failed")
+		return
+	}
+	t := &domain.Token{
+		UserID:    u.ID,
+		Hash:      domain.HashToken(token),
+		ExpiresAt: time.Now().Add(s.cfg.tokenTTL),
+	}
+	if err := s.users.CreateToken(r.Context(), t); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": u})
+}
+
+func (s *server) logout(w http.ResponseWriter, r *http.Request) {
+	token := bearerToken(r)
+	if token == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	t, err := s.users.TokenByHash(r.Context(), domain.HashToken(token))
+	if err == nil {
+		_ = s.users.DeleteToken(r.Context(), t.ID)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) me(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, currentUser(r))
+}

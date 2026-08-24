@@ -89,7 +89,7 @@ func TestProcessMessages(t *testing.T) {
 		{ID: "4-0", Values: map[string]interface{}{
 			"hostname": "shrl.io", "code": "abc", "ip": "9.9.9.9",
 			"user_agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
-			"referrer": "", "ts": "2026-08-24T11:45:00Z",
+			"referrer":   "", "ts": "2026-08-24T11:45:00Z",
 		}},
 		// missing code -> skipped
 		{ID: "5-0", Values: map[string]interface{}{
