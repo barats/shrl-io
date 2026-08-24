@@ -29,7 +29,8 @@ services:
     environment:
       SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
       SHRL_REDIS_ADDR: redis:6379
-      SHRL_ADMIN_KEY: ${SHRL_ADMIN_KEY:-dev-admin-key}
+      SHRL_ADMIN_USERNAME: ${SHRL_ADMIN_USERNAME:-admin}
+      SHRL_ADMIN_PASSWORD: ${SHRL_ADMIN_PASSWORD:-}
       SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
       SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
       SHRL_API_ADDR: :8080
@@ -69,6 +70,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      SHRL_API_URL: http://api:8080
+      SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
+      SHRL_SESSION_SECRET: ${SHRL_SESSION_SECRET:-dev-session-secret}
+      SHRL_COOKIE_SECURE: ${SHRL_COOKIE_SECURE:-false}
+    ports:
+      - "8082:3000"
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   pgdata:

@@ -6,7 +6,8 @@ under your own hostname and redirects visitors there at sub-millisecond speed.
 ## Language
 
 **Link**:
-The core entity: a `Code` on a `Hostname` that redirects to a `Destination`.
+The core entity: a `Code` on a `Hostname` that redirects to a `Destination`,
+created by a `Creator`.
 _Avoid_: Short URL, shortlink, tiny URL
 
 **Code**:
@@ -56,3 +57,37 @@ The geographic attribution of a `Visitor` — `country`, `region`, and `city`,
 derived from the visitor's IP at aggregation time. The IP itself is never
 stored; only the `Location` and aggregate counts are persisted.
 _Avoid_: geo, IP address
+
+**User**:
+A person with an account who signs in and manages Links. Every Link has a
+`Creator`; a User sees and manages only their own Links.
+_Avoid_: member, account holder
+
+**Admin**:
+A `User` with the privilege to create accounts and manage the instance. The
+first account provisioned on first run is an `Admin`.
+_Avoid_: superuser, owner, root
+
+**Creator**:
+The `User` who created a `Link`; recorded on the Link so dashboards and APIs
+can scope to the current user.
+_Avoid_: owner, author
+
+**Password**:
+The secret a `User` signs in with. Stored only as a bcrypt hash; the first-run
+`Admin` password is generated randomly and shown once in the server logs
+(override with `SHRL_ADMIN_PASSWORD`).
+_Avoid_: passphrase, key
+
+**Token**:
+The bearer credential a `User` receives at Login and presents on every API
+request (`Authorization: Bearer`). Stored as a SHA-256 hash and revocable at
+Logout.
+_Avoid_: API key, secret
+
+**Session**:
+An authenticated browser context for a `User` in the UI, established by a
+Login and carried as an HttpOnly cookie; the UI's server holds the User's
+`Token` and proxies API calls on their behalf. Distinct from the API's
+per-request `Token` auth.
+_Avoid_: login state

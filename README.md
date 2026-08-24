@@ -9,7 +9,7 @@
    SELF-HOSTED URL SHORTENER & TRAFFIC ANALYZER
 ```
 
-> **Status: MVP** — self-hosted redirects and privacy-first analytics today. Teams & roles, a dashboard UI, QR codes, rate limiting, and accounts are planned (see [Roadmap](#roadmap)).
+> **Status: MVP** — self-hosted redirects, privacy-first analytics, and a multi-user admin UI today. QR codes, rate limiting, teams, and UTM are planned (see [Roadmap](#roadmap)).
 
 ---
 
@@ -20,8 +20,8 @@
 redirects visitors there at sub-millisecond speed, while recording
 privacy-first traffic analytics. It is built as a small set of Go
 microservices — an API, a Redis-backed redirector, and an analytics worker —
-over PostgreSQL and Redis, and is designed for teams and individuals who want
-full control over their link data.
+over PostgreSQL and Redis, with a SvelteKit admin UI, and is designed for
+teams and individuals who want full control over their link data.
 
 ### Why shrl.io?
 
@@ -33,8 +33,10 @@ full control over their link data.
   breakdowns by referrer, device, OS, browser, country, region, and city.
 - 🏠 **Simple to self-host**: one `podman compose up` brings up the whole
   stack; no external accounts required (GeoIP attribution is optional).
+- 🖥️ **Built-in admin UI**: sign in with your account and manage Links from
+  the browser, no curl required.
 - 🛡️ **Secure by default**: URL validation and open-redirect protection, plus
-  admin-key auth on every API endpoint.
+  password accounts with bearer-token auth on every API endpoint.
 
 ## Features
 
@@ -66,22 +68,41 @@ full control over their link data.
 - **Optional GeoIP**: set `SHRL_GEOLITE_LICENSE` (a free MaxMind account) to
   attribute country/region/city; without it, locations report as `unknown`.
 
+### Admin UI & accounts
+
+- **Accounts**: password-based Users with bcrypt hashes; the first account is
+  an **Admin** provisioned on first run with a random password shown once in
+  the api logs (`SHRL_ADMIN_PASSWORD` sets a known one). Admins create
+  accounts; there is no self-registration.
+- **Login**: sign in with username + password; the UI issues an HttpOnly
+  session cookie and proxies API calls server-side with the user's token, so
+  the password and token never reach the browser.
+- **Link management**: each User sees and manages only their own Links, per
+  Hostname: create, edit the Destination, disable/enable, and delete.
+- **Analytics view**: lifetime and window totals, a daily visits chart, and
+  top-N breakdowns with a dimension picker.
+
 ### Security
 
 - **Open-redirect protection**: only `http`/`https` Destinations are accepted;
   loopback, private, and link-local addresses are rejected at create/update
   time.
-- **Admin-key auth**: every API endpoint requires `SHRL_ADMIN_KEY`, sent as
-  `X-API-Key` or `Authorization: Bearer`.
+- **Account auth**: every API endpoint requires a bearer token from a password
+  login; tokens are stored hashed, revocable on logout.
 - **No raw IPs persisted**: Visitor identity is stored as a hash of
   `(Link, day, IP + user-agent)`; the IP itself is never written.
 
 ## Architecture
 
 ```
-                          ┌──────────────┐
-   create / manage Link ─►│     api      │   REST API, admin-key auth
-                          └──────┬───────┘
+                          ┌───────────────────┐
+   user (browser) ───────►│ frontend (Svelte) │   login + session cookie
+                          └─────────┬─────────┘
+                                    │ proxies with the user's token
+                                    ▼
+   create / manage Link ──► ┌──────────────┐
+                            │     api      │   REST API, bearer-token auth
+                            └──────┬───────┘
                                  │ write-through (Link cache)
                      ┌───────────┴───────────┐
                      ▼                       ▼
@@ -121,11 +142,13 @@ full control over their link data.
 
 Planned, not yet built:
 
-- **Teams & roles**: multi-user collaboration with granular permissions
-- **Web dashboard**: a UI with charts and maps (SvelteKit frontend)
+- **Teams**: shared Links across Users with fine-grained permissions (basic
+  admin/user roles ship today)
+- **Geographic maps**: country/region map views in the admin analytics screen
+  (the base dashboard UI now ships with charts)
 - **QR code generation** for every Link, with download
 - **Rate limiting** on the API and redirector
-- **Sessions & accounts**: login, per-user API keys, bcrypt password hashing
+- **Password change & reset**, per-user API keys
 - **UTM campaign tracking**
 
 ## Development
@@ -134,17 +157,28 @@ Prerequisites: Go 1.25+, podman (with podman-compose).
 
 ### Run the full stack
 
-    SHRL_ADMIN_KEY=dev-admin-key podman compose up --build
+    podman compose up --build
+
+On first run the api provisions an **admin** account: the password is either
+`SHRL_ADMIN_PASSWORD` (if set) or a random value printed once to the api
+service logs (`podman logs shrl-io_api_1`).
 
 Services:
 
 - Redirector: http://localhost:8080/{code}
 - API: http://localhost:8081
+- Frontend: http://localhost:8082 (sign in with the admin account)
 
 ### Create a Link
 
+    # get a bearer token
+    TOKEN=$(curl -s http://localhost:8081/login \
+      -H "Content-Type: application/json" \
+      -d '{"username":"admin","password":"<the-admin-password>"}' \
+      | jq -r .token)
+
     curl -X POST http://localhost:8081/links \
-      -H "X-API-Key: dev-admin-key" \
+      -H "Authorization: Bearer $TOKEN" \
       -H "Content-Type: application/json" \
       -d '{"hostname":"localhost","destination":"https://example.com"}'
 
@@ -156,11 +190,11 @@ The API `hostname` defaults to `SHRL_DEFAULT_HOSTNAME` (`localhost`), or pass
 ### Analytics (the worker aggregates visits from the Redis stream)
 
     curl -s "http://localhost:8081/links/{code}/analytics?hostname=localhost" \
-      -H "X-API-Key: dev-admin-key"
+      -H "Authorization: Bearer $TOKEN"
     curl -s "http://localhost:8081/links/{code}/analytics/timeseries?hostname=localhost" \
-      -H "X-API-Key: dev-admin-key"
+      -H "Authorization: Bearer $TOKEN"
     curl -s "http://localhost:8081/links/{code}/analytics/breakdowns?hostname=localhost&dimension=referrer" \
-      -H "X-API-Key: dev-admin-key"
+      -H "Authorization: Bearer $TOKEN"
 
 Dimensions: `referrer`, `device`, `os`, `browser`, `country`, `region`,
 `city`. Bots and link-preview unfurlers are excluded. Rollups are pruned after
@@ -179,25 +213,38 @@ All services are configured via environment variables.
 
 | Variable                | Default                                              | Services      | Purpose                                          |
 |-------------------------|------------------------------------------------------|---------------|--------------------------------------------------|
-| `SHRL_ADMIN_KEY`        | *(required)*                                         | api           | Admin key required by every API endpoint         |
+| `SHRL_ADMIN_USERNAME`   | `admin`                                              | api           | Username of the first-run Admin account          |
+| `SHRL_ADMIN_PASSWORD`   | *(random, shown once)*                               | api           | First-run Admin password (bcrypt-hashed)         |
+| `SHRL_TOKEN_TTL`        | `86400`                                              | api           | Bearer token lifetime in seconds                 |
 | `SHRL_DATABASE_URL`     | `postgres://shrl:shrl@localhost:5432/shrl`           | api, worker   | PostgreSQL connection string                     |
 | `SHRL_REDIS_ADDR`       | `localhost:6379`                                     | all           | Redis address                                    |
 | `SHRL_API_ADDR`         | `:8080`                                              | api           | API listen address                               |
 | `SHRL_REDIRECTOR_ADDR`  | `:8080`                                              | redirector    | Redirector listen address                        |
-| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api           | Hostname used when a request specifies none      |
+| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, frontend| Hostname used when a request specifies none      |
 | `SHRL_RETENTION_DAYS`   | `365`                                                | api, worker   | Analytics retention window (daily rollups)       |
 | `SHRL_GEOLITE_LICENSE`  | *(unset)*                                            | worker        | MaxMind license key; enables GeoIP attribution   |
 | `SHRL_GEOLITE_DB_PATH`  | `/data/GeoLite2-City.mmdb`                           | worker        | Path to the GeoLite2 City database               |
+| `SHRL_API_URL`          | `http://localhost:8081`                              | frontend      | Backend API address the UI proxies to           |
+| `SHRL_SESSION_SECRET`   | *(random per boot)*                                  | frontend      | HMAC secret for signing UI session cookies       |
+| `SHRL_COOKIE_SECURE`    | `false`                                              | frontend      | Set `true` to send the session cookie over TLS only |
 
 ## API reference
 
-All endpoints require the admin key (`X-API-Key: <key>` or
-`Authorization: Bearer <key>`); requests without it get `401`.
+Every endpoint except `POST /login` and `POST /logout` requires
+`Authorization: Bearer <token>`; requests without a valid token get `401`.
+Get a token from `POST /login`. Links are scoped to the authenticated User: a
+User sees only the Links they created.
 
 | Method | Path                                   | Purpose                                             |
 |--------|----------------------------------------|-----------------------------------------------------|
+| POST   | `/login`                               | Sign in; returns a bearer `token` and the `user`    |
+| POST   | `/logout`                              | Revoke the presented token                          |
+| GET    | `/me`                                  | The authenticated user                              |
+| GET    | `/users`                               | List users (admin only)                             |
+| POST   | `/users`                               | Create a user (admin only); password returned once  |
 | POST   | `/links`                               | Create a Link (auto or custom Code)                 |
-| GET    | `/links`                               | List Links for a Hostname                           |
+| GET    | `/links`                               | List the current user's Links for a Hostname        |
+| GET    | `/hostnames`                           | List Hostnames the current user has Links on        |
 | GET    | `/links/{code}`                        | Get a Link                                          |
 | PATCH  | `/links/{code}`                        | Update a Link's Destination                         |
 | POST   | `/links/{code}/disable`                | Disable a Link (redirector returns 404)             |
@@ -208,7 +255,7 @@ All endpoints require the admin key (`X-API-Key: <key>` or
 | GET    | `/links/{code}/analytics/breakdowns`   | Top-N dimension values in the window                |
 
 A Link is a JSON object: `hostname`, `code`, `destination`, `disabled`,
-`created_at`, `updated_at`.
+`created_by`, `created_at`, `updated_at`.
 
 Query parameters:
 
@@ -222,8 +269,9 @@ Query parameters:
 ## Terminology
 
 This project uses a precise domain vocabulary (Link, Code, Hostname,
-Destination, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete).
-See [`CONTEXT.md`](CONTEXT.md) for definitions and the words to avoid.
+Destination, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete, User,
+Admin, Creator, Token, Password). See [`CONTEXT.md`](CONTEXT.md) for
+definitions and the words to avoid.
 
 ## Documentation
 
