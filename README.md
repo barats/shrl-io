@@ -235,7 +235,8 @@ All services are configured via environment variables.
 Every endpoint except `POST /login` and `POST /logout` requires
 `Authorization: Bearer <token>`; requests without a valid token get `401`.
 Get a token from `POST /login`. Links are scoped to the authenticated User: a
-User sees only the Links they created.
+User sees the Personal Links they created and, read-only, the Links of any
+Team they belong to.
 
 | Method | Path                                   | Purpose                                             |
 |--------|----------------------------------------|-----------------------------------------------------|
@@ -257,9 +258,25 @@ User sees only the Links they created.
 | GET    | `/links/{code}/analytics`              | Lifetime and window visit totals                    |
 | GET    | `/links/{code}/analytics/timeseries`   | Daily visit buckets in the window, ascending        |
 | GET    | `/links/{code}/analytics/breakdowns`   | Top-N dimension values in the window                |
+| POST   | `/teams`                               | Create a Team (admin only); the admin becomes first Team Owner |
+| GET    | `/teams`                               | List the caller's Teams (with their role); admins see all |
+| GET    | `/teams/{id}`                          | Team details and members (members and admins)       |
+| GET    | `/teams/{id}/links`                    | The Team's Links, read-only for members             |
+| POST   | `/teams/{id}/links`                    | Create a Link in the Team (members)                 |
+| POST   | `/teams/{id}/members`                  | Add an existing user as a member (Team Owner)       |
+| PATCH  | `/teams/{id}/members/{userID}`         | Promote or demote a member (Team Owner)             |
+| DELETE | `/teams/{id}/members/{userID}`         | Remove a member (Team Owner); a member may remove themself |
+| DELETE | `/teams/{id}`                          | Delete a Team (admin only); its Links revert to Personal |
 
 A Link is a JSON object: `hostname`, `code`, `destination`, `remark`,
-`disabled`, `created_by`, `created_at`, `updated_at`.
+`disabled`, `created_by`, `team_id`, `created_at`, `updated_at`. `team_id` is
+`null` for Personal Links.
+
+Teams are the ownership boundary for Links: a Link belongs to exactly one Team
+or is Personal (no Team), and a Link's Team is fixed — it never moves. Team
+Members see all of the Team's Links and their analytics read-only; a Link is
+managed by its Creator (while a member of the Team) or by a Team Owner.
+Joining or leaving a Team never moves existing Personal Links.
 
 Query parameters:
 
@@ -275,8 +292,9 @@ Query parameters:
 
 This project uses a precise domain vocabulary (Link, Code, Hostname,
 Destination, Remark, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete,
-User, Admin, Creator, Token, Password). See [`CONTEXT.md`](CONTEXT.md) for
-definitions and the words to avoid.
+User, Admin, Creator, Personal Link, Team, Team Owner, Team Member, Token,
+Password). See [`CONTEXT.md`](CONTEXT.md) for definitions and the words to
+avoid.
 
 ## Documentation
 

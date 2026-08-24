@@ -63,13 +63,32 @@ func (s *LinkStore) Get(ctx context.Context, hostname, code string) (*domain.Lin
 	return &l, nil
 }
 
-// List returns the links of one creator on a hostname, newest first.
+// List returns the personal links (not assigned to a team) of one creator on
+// a hostname, newest first.
 func (s *LinkStore) List(ctx context.Context, hostname string, creatorID int64) ([]domain.Link, error) {
 	var links []domain.Link
 	err := s.db.WithContext(ctx).
-		Where("hostname = ? AND created_by = ?", hostname, creatorID).
+		Where("hostname = ? AND created_by = ? AND team_id IS NULL", hostname, creatorID).
 		Order("created_at DESC").Find(&links).Error
 	return links, err
+}
+
+// ListByTeam returns the links of a team on a hostname, newest first.
+func (s *LinkStore) ListByTeam(ctx context.Context, hostname string, teamID int64) ([]domain.Link, error) {
+	var links []domain.Link
+	err := s.db.WithContext(ctx).
+		Where("hostname = ? AND team_id = ?", hostname, teamID).
+		Order("created_at DESC").Find(&links).Error
+	return links, err
+}
+
+// TransferTeamLinksToPersonal moves every link of a team to Personal scope,
+// keeping each link's creator. Used when a team is deleted; the team is the
+// only exception to the no-transfer rule.
+func (s *LinkStore) TransferTeamLinksToPersonal(ctx context.Context, teamID int64) error {
+	return s.db.WithContext(ctx).Model(&domain.Link{}).
+		Where("team_id = ?", teamID).
+		Update("team_id", gorm.Expr("NULL")).Error
 }
 
 // ListActive returns all non-disabled links, for the cache warmer.

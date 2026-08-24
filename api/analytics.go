@@ -39,7 +39,7 @@ func parseDayParam(v string, def time.Time) time.Time {
 func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, ok := s.ownedLink(w, r, code); !ok {
+	if _, ok := s.accessibleLink(w, r, code); !ok {
 		return
 	}
 	from, to := s.analyticsWindow(r)
@@ -65,7 +65,7 @@ func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, ok := s.ownedLink(w, r, code); !ok {
+	if _, ok := s.accessibleLink(w, r, code); !ok {
 		return
 	}
 	from, to := s.analyticsWindow(r)
@@ -91,7 +91,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, browser, country, region, or city")
 		return
 	}
-	if _, ok := s.ownedLink(w, r, code); !ok {
+	if _, ok := s.accessibleLink(w, r, code); !ok {
 		return
 	}
 	from, to := s.analyticsWindow(r)

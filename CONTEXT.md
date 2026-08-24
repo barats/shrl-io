@@ -7,7 +7,9 @@ under your own hostname and redirects visitors there at sub-millisecond speed.
 
 **Link**:
 The core entity: a `Code` on a `Hostname` that redirects to a `Destination`,
-created by a `Creator`.
+created by a `Creator`. A Link belongs to exactly one Team or is Personal (no
+Team); its Team is fixed even if its Creator leaves or is removed from that
+Team.
 _Avoid_: Short URL, shortlink, tiny URL
 
 **Code**:
@@ -74,19 +76,47 @@ _Avoid_: geo, IP address
 
 **User**:
 A person with an account who signs in and manages Links. Every Link has a
-`Creator`; a User sees and manages only their own Links.
-_Avoid_: member, account holder
+`Creator`; a User manages their own Links and, as a Team Member, sees the
+Links of any Team they belong to (read-only).
+_Avoid_: account holder
 
 **Admin**:
 A `User` with the privilege to create accounts, register and remove
-`Hostname`s, and manage the instance. The first account provisioned on first
-run is an `Admin`.
-_Avoid_: superuser, owner, root
+`Hostname`s, create Teams, and manage the instance. The first account
+provisioned on first run is an `Admin`. An Admin may be a Team Member or
+Team Owner of a Team, but holds no implicit role in a Team unless it was
+granted.
+_Avoid_: superuser, root
 
 **Creator**:
 The `User` who created a `Link`; recorded on the Link so dashboards and APIs
 can scope to the current user.
-_Avoid_: owner, author
+_Avoid_: author
+
+**Personal Link**:
+A `Link` with no `Team`, visible and manageable only by its `Creator`. The
+scope for Users who belong to no Team or choose not to assign a Link to a Team.
+_Avoid_: private link, individual link
+
+**Team**:
+A group of `User`s created by an `Admin`. The `Team` is the visibility boundary
+for Links assigned to it: every `Team Member` sees all of the `Team`'s Links
+and their related data. Membership is many-to-many; a `User` may belong to
+several Teams.
+_Avoid_: group, workspace, organization
+
+**Team Owner**:
+A `Team Member` with the privilege to manage the `Team`'s membership: add and
+remove members, and promote or demote other `Team Owner`s. Being a Team Owner
+grants no authority over other Teams or over the instance; an `Admin` holds no
+implicit Team Owner role.
+_Avoid_: owner (alone), team admin, admin
+
+**Team Member**:
+A `User` who belongs to a `Team`. Sees the `Team`'s Links and their related
+data (read-only) and manages only their own Links. Distinct from `Creator`,
+which is a per-Link role.
+_Avoid_: member (alone), contributor
 
 **Password**:
 The secret a `User` signs in with. Stored only as a bcrypt hash; the first-run

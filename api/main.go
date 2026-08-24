@@ -48,6 +48,7 @@ type server struct {
 	analytics *store.AnalyticsStore
 	users     *store.UserStore
 	hostnames *store.HostnameStore
+	teams     *store.TeamStore
 	linkCache *cache.LinkCache
 	cfg       config
 }
@@ -61,6 +62,7 @@ func main() {
 	analytics := store.NewAnalyticsStore(db)
 	users := store.NewUserStore(db)
 	hostnames := store.NewHostnameStore(db)
+	teams := store.NewTeamStore(db)
 	if err := links.Migrate(ctx); err != nil {
 		log.Fatalf("migrate links: %v", err)
 	}
@@ -73,12 +75,15 @@ func main() {
 	if err := hostnames.Migrate(ctx); err != nil {
 		log.Fatalf("migrate hostnames: %v", err)
 	}
+	if err := teams.Migrate(ctx); err != nil {
+		log.Fatalf("migrate teams: %v", err)
+	}
 	bootstrapAdmin(ctx, users, cfg)
 	bootstrapHostnames(ctx, hostnames, cfg)
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, linkCache: linkCache, cfg: cfg}
+	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, linkCache: linkCache, cfg: cfg}
 
 	go func() {
 		warm(ctx, links, linkCache)
@@ -89,6 +94,13 @@ func main() {
 		}
 	}()
 
+	mux := s.routes()
+	log.Printf("api listening on %s", cfg.addr)
+	log.Fatal(http.ListenAndServe(cfg.addr, s.auth(mux)))
+}
+
+// routes registers every API route on a fresh mux.
+func (s *server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
@@ -108,9 +120,16 @@ func main() {
 	mux.HandleFunc("GET /links/{code}/analytics", s.getAnalytics)
 	mux.HandleFunc("GET /links/{code}/analytics/timeseries", s.getAnalyticsTimeseries)
 	mux.HandleFunc("GET /links/{code}/analytics/breakdowns", s.getAnalyticsBreakdowns)
-
-	log.Printf("api listening on %s", cfg.addr)
-	log.Fatal(http.ListenAndServe(cfg.addr, s.auth(mux)))
+	mux.HandleFunc("POST /teams", s.createTeam)
+	mux.HandleFunc("GET /teams", s.listTeams)
+	mux.HandleFunc("GET /teams/{id}", s.getTeam)
+	mux.HandleFunc("GET /teams/{id}/links", s.listTeamLinks)
+	mux.HandleFunc("POST /teams/{id}/links", s.createTeamLink)
+	mux.HandleFunc("POST /teams/{id}/members", s.addTeamMember)
+	mux.HandleFunc("PATCH /teams/{id}/members/{userID}", s.setTeamMemberRole)
+	mux.HandleFunc("DELETE /teams/{id}/members/{userID}", s.removeTeamMember)
+	mux.HandleFunc("DELETE /teams/{id}", s.deleteTeam)
+	return mux
 }
 
 // bootstrapAdmin provisions the first Admin when the users table is empty and
@@ -184,21 +203,80 @@ func (s *server) hostname(r *http.Request) string {
 	return s.cfg.defaultHostname
 }
 
-// ownedLink loads a link and enforces that it belongs to the current user.
-func (s *server) ownedLink(w http.ResponseWriter, r *http.Request, code string) (*domain.Link, bool) {
+// canReadLink reports whether the current user may see a link. Personal links
+// are visible only to their creator. Team links are visible to any member of
+// the team and to admins (as instance oversight); a creator who left the team
+// is an outsider and loses access.
+func (s *server) canReadLink(r *http.Request, l *domain.Link) bool {
+	u := currentUser(r)
+	if u == nil {
+		return false
+	}
+	if l.TeamID == nil {
+		return l.CreatedBy == u.ID
+	}
+	if u.IsAdmin {
+		return true
+	}
+	_, err := s.teams.MemberRole(r.Context(), *l.TeamID, u.ID)
+	return err == nil
+}
+
+// canManageLink reports whether the current user may edit, disable, or delete
+// a link: its creator (while a member of its team), or a Team Owner of its
+// team. Admins manage team links only through an actual Team Owner role.
+func (s *server) canManageLink(r *http.Request, l *domain.Link) bool {
+	u := currentUser(r)
+	if u == nil {
+		return false
+	}
+	if l.TeamID == nil {
+		return l.CreatedBy == u.ID
+	}
+	role, err := s.teams.MemberRole(r.Context(), *l.TeamID, u.ID)
+	if err != nil {
+		return false
+	}
+	return role == domain.RoleOwner || l.CreatedBy == u.ID
+}
+
+// accessibleLink loads a link and enforces read access for the current user.
+func (s *server) accessibleLink(w http.ResponseWriter, r *http.Request, code string) (*domain.Link, bool) {
 	l, err := s.links.Get(r.Context(), s.hostname(r), code)
 	if err != nil {
 		writeStoreError(w, err)
 		return nil, false
 	}
-	if l.CreatedBy != currentUser(r).ID {
+	if !s.canReadLink(r, l) {
 		writeError(w, http.StatusNotFound, "link not found")
 		return nil, false
 	}
 	return l, true
 }
 
-func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
+// manageableLink loads a link and enforces manage access for the current
+// user. A user who can read but not manage gets 403; a user with no access
+// gets 404 so link existence is not leaked.
+func (s *server) manageableLink(w http.ResponseWriter, r *http.Request, code string) (*domain.Link, bool) {
+	l, err := s.links.Get(r.Context(), s.hostname(r), code)
+	if err != nil {
+		writeStoreError(w, err)
+		return nil, false
+	}
+	if s.canManageLink(r, l) {
+		return l, true
+	}
+	if s.canReadLink(r, l) {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return nil, false
+	}
+	writeError(w, http.StatusNotFound, "link not found")
+	return nil, false
+}
+
+// createLinkInScope validates the create-link request and persists the link,
+// scoped to a Team (teamID non-nil) or Personal (teamID nil).
+func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamID *int64, creatorID int64) {
 	var req struct {
 		Hostname    string `json:"hostname"`
 		Destination string `json:"destination"`
@@ -231,7 +309,6 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	creator := currentUser(r).ID
 
 	for attempt := 0; attempt < 8; attempt++ {
 		code, err := domain.GenerateCode()
@@ -239,7 +316,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "code generation failed")
 			return
 		}
-		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, CreatedBy: creator}
+		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, CreatedBy: creatorID, TeamID: teamID}
 		if err := s.links.Create(r.Context(), l); err == nil {
 			s.linkCache.Put(r.Context(), l)
 			writeJSON(w, http.StatusCreated, l)
@@ -254,8 +331,12 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusInternalServerError, "could not allocate a unique code")
 }
 
+func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
+	s.createLinkInScope(w, r, nil, currentUser(r).ID)
+}
+
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
-	l, ok := s.ownedLink(w, r, r.PathValue("code"))
+	l, ok := s.accessibleLink(w, r, r.PathValue("code"))
 	if !ok {
 		return
 	}
@@ -293,7 +374,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	l, ok := s.ownedLink(w, r, r.PathValue("code"))
+	l, ok := s.manageableLink(w, r, r.PathValue("code"))
 	if !ok {
 		return
 	}
@@ -308,7 +389,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
-	l, ok := s.ownedLink(w, r, r.PathValue("code"))
+	l, ok := s.manageableLink(w, r, r.PathValue("code"))
 	if !ok {
 		return
 	}
@@ -334,7 +415,7 @@ func (s *server) enableLink(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteLink(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, ok := s.ownedLink(w, r, code); !ok {
+	if _, ok := s.manageableLink(w, r, code); !ok {
 		return
 	}
 	if err := s.links.Delete(r.Context(), hostname, code); err != nil {
