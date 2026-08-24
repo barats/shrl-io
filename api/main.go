@@ -7,12 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/barats/shrl-io/internal/cache"
 	"github.com/barats/shrl-io/internal/dbutil"
 	"github.com/barats/shrl-io/internal/domain"
+	"github.com/barats/shrl-io/internal/env"
 	"github.com/barats/shrl-io/internal/redisutil"
 	"github.com/barats/shrl-io/internal/store"
 )
@@ -31,32 +31,16 @@ type config struct {
 
 func loadConfig() config {
 	return config{
-		addr:            envOr("SHRL_API_ADDR", ":8080"),
-		databaseURL:     envOr("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
-		redisAddr:       envOr("SHRL_REDIS_ADDR", "localhost:6379"),
-		adminUsername:   envOr("SHRL_ADMIN_USERNAME", "admin"),
+		addr:            env.Or("SHRL_API_ADDR", ":8080"),
+		databaseURL:     env.Or("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
+		redisAddr:       env.Or("SHRL_REDIS_ADDR", "localhost:6379"),
+		adminUsername:   env.Or("SHRL_ADMIN_USERNAME", "admin"),
 		adminPassword:   os.Getenv("SHRL_ADMIN_PASSWORD"),
-		defaultHostname: envOr("SHRL_DEFAULT_HOSTNAME", "localhost"),
-		retentionDays:   envInt("SHRL_RETENTION_DAYS", 365),
-		tokenTTL:        time.Duration(envInt("SHRL_TOKEN_TTL", 86400)) * time.Second,
+		defaultHostname: env.Or("SHRL_DEFAULT_HOSTNAME", "localhost"),
+		retentionDays:   env.Int("SHRL_RETENTION_DAYS", 365),
+		tokenTTL:        time.Duration(env.Int("SHRL_TOKEN_TTL", 86400)) * time.Second,
 		warmInterval:    5 * time.Minute,
 	}
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
 }
 
 type server struct {

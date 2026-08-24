@@ -5,10 +5,10 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/barats/shrl-io/internal/cache"
+	"github.com/barats/shrl-io/internal/env"
 	"github.com/barats/shrl-io/internal/redisutil"
 )
 
@@ -19,16 +19,9 @@ type config struct {
 
 func loadConfig() config {
 	return config{
-		addr:      envOr("SHRL_REDIRECTOR_ADDR", ":8080"),
-		redisAddr: envOr("SHRL_REDIS_ADDR", "localhost:6379"),
+		addr:      env.Or("SHRL_REDIRECTOR_ADDR", ":8080"),
+		redisAddr: env.Or("SHRL_REDIS_ADDR", "localhost:6379"),
 	}
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 func main() {

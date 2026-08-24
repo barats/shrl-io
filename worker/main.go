@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/barats/shrl-io/internal/analytics"
 	"github.com/barats/shrl-io/internal/cache"
 	"github.com/barats/shrl-io/internal/dbutil"
+	"github.com/barats/shrl-io/internal/env"
 	"github.com/barats/shrl-io/internal/geo"
 	"github.com/barats/shrl-io/internal/redisutil"
 	"github.com/barats/shrl-io/internal/store"
@@ -29,29 +29,13 @@ type config struct {
 func loadConfig() config {
 	hostname, _ := os.Hostname()
 	return config{
-		redisAddr:     envOr("SHRL_REDIS_ADDR", "localhost:6379"),
-		databaseURL:   envOr("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
-		retentionDays: envInt("SHRL_RETENTION_DAYS", 365),
+		redisAddr:     env.Or("SHRL_REDIS_ADDR", "localhost:6379"),
+		databaseURL:   env.Or("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
+		retentionDays: env.Int("SHRL_RETENTION_DAYS", 365),
 		// Stable per host: a fresh PID would orphan this consumer's unacked
 		// messages in the group after a restart. One worker per host at MVP.
 		consumer: hostname,
 	}
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
 }
 
 func main() {
@@ -142,7 +126,7 @@ func processBatch(ctx context.Context, proc *analytics.Processor, ca *cache.Anal
 // MaxMind license key is configured; otherwise geo is disabled and locations
 // are "unknown". When enabled it starts a periodic refresh.
 func setupGeo(ctx context.Context) *geo.Resolver {
-	dbPath := envOr("SHRL_GEOLITE_DB_PATH", "/data/GeoLite2-City.mmdb")
+	dbPath := env.Or("SHRL_GEOLITE_DB_PATH", "/data/GeoLite2-City.mmdb")
 	licenseKey := os.Getenv("SHRL_GEOLITE_LICENSE")
 
 	var r *geo.Resolver

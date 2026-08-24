@@ -3,12 +3,12 @@ package redisutil
 import (
 	"context"
 	"log"
-	"os"
 	"runtime"
-	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/barats/shrl-io/internal/env"
 )
 
 // Config controls the Redis connection pool. Zero values fall back to
@@ -24,8 +24,8 @@ type Config struct {
 func ConfigFromEnv(addr string, defPoolSize, defMinIdle int) Config {
 	return Config{
 		Addr:         addr,
-		PoolSize:     envInt("SHRL_REDIS_POOL_SIZE", defPoolSize),
-		MinIdleConns: envInt("SHRL_REDIS_MIN_IDLE_CONNS", defMinIdle),
+		PoolSize:     env.Int("SHRL_REDIS_POOL_SIZE", defPoolSize),
+		MinIdleConns: env.Int("SHRL_REDIS_MIN_IDLE_CONNS", defMinIdle),
 	}
 }
 
@@ -55,13 +55,4 @@ func effectivePoolSize(poolSize int) int {
 		return 10 * runtime.GOMAXPROCS(0)
 	}
 	return poolSize
-}
-
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
 }

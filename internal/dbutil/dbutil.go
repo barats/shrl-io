@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"os"
-	"strconv"
 	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+
+	"github.com/barats/shrl-io/internal/env"
 )
 
 // Config controls the Postgres connection pool via GORM. Zero values fall back
@@ -28,10 +28,10 @@ type Config struct {
 func ConfigFromEnv(dsn string) Config {
 	return Config{
 		DSN:             dsn,
-		MaxOpenConns:    envInt("SHRL_DB_MAX_OPEN_CONNS", 20),
-		MaxIdleConns:    envInt("SHRL_DB_MAX_IDLE_CONNS", 5),
-		ConnMaxLifetime: envDuration("SHRL_DB_CONN_MAX_LIFETIME", 30*time.Minute),
-		ConnMaxIdleTime: envDuration("SHRL_DB_CONN_MAX_IDLE_TIME", 5*time.Minute),
+		MaxOpenConns:    env.Int("SHRL_DB_MAX_OPEN_CONNS", 20),
+		MaxIdleConns:    env.Int("SHRL_DB_MAX_IDLE_CONNS", 5),
+		ConnMaxLifetime: env.Duration("SHRL_DB_CONN_MAX_LIFETIME", 30*time.Minute),
+		ConnMaxIdleTime: env.Duration("SHRL_DB_CONN_MAX_IDLE_TIME", 5*time.Minute),
 	}
 }
 
@@ -81,22 +81,4 @@ func applyPool(db *gorm.DB, cfg Config) {
 	if cfg.ConnMaxIdleTime > 0 {
 		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 	}
-}
-
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
-}
-
-func envDuration(key string, def time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
-	}
-	return def
 }
