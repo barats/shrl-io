@@ -36,17 +36,17 @@ func parseDayParam(v string, def time.Time) time.Time {
 func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, err := s.store.Get(r.Context(), hostname, code); err != nil {
+	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	from, to := s.analyticsWindow(r)
 
 	lifetime := int64(0)
-	if lt, err := s.store.GetLifetime(r.Context(), hostname, code); err == nil {
+	if lt, err := s.analytics.GetLifetime(r.Context(), hostname, code); err == nil {
 		lifetime = lt.TotalVisits
 	}
-	visits, uniques, err := s.store.SumDailyStats(r.Context(), hostname, code, from, to)
+	visits, uniques, err := s.analytics.SumDailyStats(r.Context(), hostname, code, from, to)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load analytics")
 		return
@@ -63,12 +63,12 @@ func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, err := s.store.Get(r.Context(), hostname, code); err != nil {
+	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	from, to := s.analyticsWindow(r)
-	rows, err := s.store.GetTimeseries(r.Context(), hostname, code, from, to)
+	rows, err := s.analytics.GetTimeseries(r.Context(), hostname, code, from, to)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load analytics")
 		return
@@ -90,7 +90,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, or browser")
 		return
 	}
-	if _, err := s.store.Get(r.Context(), hostname, code); err != nil {
+	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
 		writeStoreError(w, err)
 		return
 	}
@@ -103,12 +103,12 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	totals, err := s.store.GetBreakdowns(r.Context(), hostname, code, dimension, from, to, limit)
+	totals, err := s.analytics.GetBreakdowns(r.Context(), hostname, code, dimension, from, to, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load analytics")
 		return
 	}
-	visits, _, err := s.store.SumDailyStats(r.Context(), hostname, code, from, to)
+	visits, _, err := s.analytics.SumDailyStats(r.Context(), hostname, code, from, to)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load analytics")
 		return

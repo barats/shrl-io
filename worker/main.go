@@ -65,25 +65,25 @@ func main() {
 	defer rdb.Close()
 
 	db := openPostgres(ctx, cfg.databaseURL)
-	st := store.New(db)
-	if err := st.Migrate(ctx); err != nil {
-		log.Fatalf("migrate: %v", err)
+	analyticsStore := store.NewAnalyticsStore(db)
+	if err := analyticsStore.Migrate(ctx); err != nil {
+		log.Fatalf("migrate analytics: %v", err)
 	}
 
-	ca := cache.New(rdb)
-	if err := ca.EnsureVisitGroup(ctx); err != nil {
+	analyticsCache := cache.NewAnalyticsCache(rdb)
+	if err := analyticsCache.EnsureVisitGroup(ctx); err != nil {
 		log.Fatalf("create visit group: %v", err)
 	}
 
-	proc := &analytics.Processor{Cache: ca, Store: st}
+	proc := &analytics.Processor{Cache: analyticsCache, Store: analyticsStore}
 
 	// Retention prune: at boot, then nightly.
 	go func() {
-		prune(ctx, st, cfg.retentionDays)
+		prune(ctx, analyticsStore, cfg.retentionDays)
 		t := time.NewTicker(24 * time.Hour)
 		defer t.Stop()
 		for range t.C {
-			prune(ctx, st, cfg.retentionDays)
+			prune(ctx, analyticsStore, cfg.retentionDays)
 		}
 	}()
 
@@ -92,17 +92,17 @@ func main() {
 	go func() {
 		for {
 			// Recover this consumer's in-flight batch from a previous crash.
-			msgs, err := ca.ReadVisitsPending(ctx, cfg.consumer, 1000)
+			msgs, err := analyticsCache.ReadVisitsPending(ctx, cfg.consumer, 1000)
 			if err != nil {
 				log.Printf("read pending visits: %v", err)
 			} else if len(msgs) > 0 {
-				if err := processBatch(ctx, proc, ca, msgs); err != nil {
+				if err := processBatch(ctx, proc, analyticsCache, msgs); err != nil {
 					log.Printf("process pending batch: %v", err)
 				}
 				continue
 			}
 
-			msgs, err = ca.ReadVisitsNew(ctx, cfg.consumer, 1000, 2*time.Second)
+			msgs, err = analyticsCache.ReadVisitsNew(ctx, cfg.consumer, 1000, 2*time.Second)
 			if err != nil {
 				log.Printf("read visits: %v", err)
 				time.Sleep(time.Second)
@@ -111,7 +111,7 @@ func main() {
 			if len(msgs) == 0 {
 				continue
 			}
-			if err := processBatch(ctx, proc, ca, msgs); err != nil {
+			if err := processBatch(ctx, proc, analyticsCache, msgs); err != nil {
 				log.Printf("process batch: %v", err)
 			}
 		}
@@ -123,7 +123,7 @@ func main() {
 	<-sig
 }
 
-func processBatch(ctx context.Context, proc *analytics.Processor, ca *cache.Cache, msgs []redis.XMessage) error {
+func processBatch(ctx context.Context, proc *analytics.Processor, ca *cache.AnalyticsCache, msgs []redis.XMessage) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -137,7 +137,7 @@ func processBatch(ctx context.Context, proc *analytics.Processor, ca *cache.Cach
 	return ca.AckVisits(ctx, ids)
 }
 
-func prune(ctx context.Context, st *store.Store, retentionDays int) {
+func prune(ctx context.Context, st *store.AnalyticsStore, retentionDays int) {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 	cutoff = time.Date(cutoff.Year(), cutoff.Month(), cutoff.Day(), 0, 0, 0, 0, time.UTC)
 	if err := st.PruneAnalytics(ctx, cutoff); err != nil {

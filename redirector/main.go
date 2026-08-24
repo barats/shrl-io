@@ -35,7 +35,8 @@ func main() {
 	cfg := loadConfig()
 	ctx := context.Background()
 	rdb := redisutil.Connect(ctx, cfg.redisAddr)
-	ca := cache.New(rdb)
+	linkCache := cache.NewLinkCache(rdb)
+	analyticsCache := cache.NewAnalyticsCache(rdb)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{code}", func(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +46,7 @@ func main() {
 			return
 		}
 		host := hostOnly(r.Host)
-		dest, ok, err := ca.Get(r.Context(), host, code)
+		dest, ok, err := linkCache.Get(r.Context(), host, code)
 		if err != nil {
 			log.Printf("cache lookup error: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -58,7 +59,7 @@ func main() {
 			return
 		}
 		// Detached context: r.Context() is cancelled when this handler returns.
-		go ca.RecordVisit(context.Background(), host, code, clientIP(r), r.UserAgent(), r.Referer())
+		go analyticsCache.RecordVisit(context.Background(), host, code, clientIP(r), r.UserAgent(), r.Referer())
 		http.Redirect(w, r, dest, http.StatusFound)
 	})
 

@@ -61,9 +61,10 @@ func envInt(key string, def int) int {
 }
 
 type server struct {
-	store *store.Store
-	cache *cache.Cache
-	cfg   config
+	links     *store.LinkStore
+	analytics *store.AnalyticsStore
+	linkCache *cache.LinkCache
+	cfg       config
 }
 
 func main() {
@@ -74,21 +75,25 @@ func main() {
 	ctx := context.Background()
 
 	db := openPostgres(ctx, cfg.databaseURL)
-	st := store.New(db)
-	if err := st.Migrate(ctx); err != nil {
-		log.Fatalf("migrate: %v", err)
+	links := store.NewLinkStore(db)
+	analytics := store.NewAnalyticsStore(db)
+	if err := links.Migrate(ctx); err != nil {
+		log.Fatalf("migrate links: %v", err)
+	}
+	if err := analytics.Migrate(ctx); err != nil {
+		log.Fatalf("migrate analytics: %v", err)
 	}
 
 	rdb := redisutil.Connect(ctx, cfg.redisAddr)
-	ca := cache.New(rdb)
-	s := &server{store: st, cache: ca, cfg: cfg}
+	linkCache := cache.NewLinkCache(rdb)
+	s := &server{links: links, analytics: analytics, linkCache: linkCache, cfg: cfg}
 
 	go func() {
-		warm(ctx, st, ca)
+		warm(ctx, links, linkCache)
 		t := time.NewTicker(cfg.warmInterval)
 		defer t.Stop()
 		for range t.C {
-			warm(ctx, st, ca)
+			warm(ctx, links, linkCache)
 		}
 	}()
 
@@ -132,7 +137,7 @@ func openPostgres(ctx context.Context, dsn string) *gorm.DB {
 	return nil
 }
 
-func warm(ctx context.Context, st *store.Store, ca *cache.Cache) {
+func warm(ctx context.Context, st *store.LinkStore, ca *cache.LinkCache) {
 	n, err := ca.Warm(ctx, st)
 	if err != nil {
 		log.Printf("cache warm failed: %v", err)
@@ -190,8 +195,8 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			l := &domain.Link{Hostname: hostname, Code: code, Destination: dest}
-			if err := s.store.Create(r.Context(), l); err == nil {
-				s.cache.Put(r.Context(), l)
+			if err := s.links.Create(r.Context(), l); err == nil {
+				s.linkCache.Put(r.Context(), l)
 				writeJSON(w, http.StatusCreated, l)
 				return
 			} else if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -210,7 +215,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l := &domain.Link{Hostname: hostname, Code: req.Code, Destination: dest}
-	if err := s.store.Create(r.Context(), l); err != nil {
+	if err := s.links.Create(r.Context(), l); err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			writeError(w, http.StatusConflict, "code already exists on this hostname")
 		} else {
@@ -218,12 +223,12 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	s.cache.Put(r.Context(), l)
+	s.linkCache.Put(r.Context(), l)
 	writeJSON(w, http.StatusCreated, l)
 }
 
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
-	l, err := s.store.Get(r.Context(), s.hostname(r), r.PathValue("code"))
+	l, err := s.links.Get(r.Context(), s.hostname(r), r.PathValue("code"))
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -232,7 +237,7 @@ func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
-	links, err := s.store.List(r.Context(), s.hostname(r))
+	links, err := s.links.List(r.Context(), s.hostname(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
@@ -256,34 +261,34 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	l, err := s.store.Get(r.Context(), s.hostname(r), r.PathValue("code"))
+	l, err := s.links.Get(r.Context(), s.hostname(r), r.PathValue("code"))
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	l.Destination = dest
-	if err := s.store.Save(r.Context(), l); err != nil {
+	if err := s.links.Save(r.Context(), l); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update link")
 		return
 	}
-	s.cache.Put(r.Context(), l)
+	s.linkCache.Put(r.Context(), l)
 	writeJSON(w, http.StatusOK, l)
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
-	l, err := s.store.Get(r.Context(), s.hostname(r), r.PathValue("code"))
+	l, err := s.links.Get(r.Context(), s.hostname(r), r.PathValue("code"))
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	l.Disabled = disabled
-	if err := s.store.Save(r.Context(), l); err != nil {
+	if err := s.links.Save(r.Context(), l); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update link")
 		return
 	}
 	// Put handles both directions: active links are cached, disabled ones are
 	// evicted so the redirector 404s them.
-	s.cache.Put(r.Context(), l)
+	s.linkCache.Put(r.Context(), l)
 	writeJSON(w, http.StatusOK, l)
 }
 
@@ -298,15 +303,15 @@ func (s *server) enableLink(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteLink(w http.ResponseWriter, r *http.Request) {
 	hostname := s.hostname(r)
 	code := r.PathValue("code")
-	if _, err := s.store.Get(r.Context(), hostname, code); err != nil {
+	if _, err := s.links.Get(r.Context(), hostname, code); err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	if err := s.store.Delete(r.Context(), hostname, code); err != nil {
+	if err := s.links.Delete(r.Context(), hostname, code); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete link")
 		return
 	}
-	s.cache.Delete(r.Context(), hostname, code)
+	s.linkCache.Delete(r.Context(), hostname, code)
 	w.WriteHeader(http.StatusNoContent)
 }
 

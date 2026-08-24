@@ -11,7 +11,7 @@ import (
 )
 
 // Cache and Store are the seams the processor needs; satisfied by
-// *cache.Cache and *store.Store, faked in tests.
+// *cache.AnalyticsCache and *store.AnalyticsStore, faked in tests.
 type Cache interface {
 	AddUniqueVisitor(ctx context.Context, hostname, code string, day time.Time, hash string) (bool, error)
 	RemoveUniqueVisitor(ctx context.Context, hostname, code string, day time.Time, hash string) error

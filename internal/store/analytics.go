@@ -11,6 +11,21 @@ import (
 	"github.com/barats/shrl-io/internal/domain"
 )
 
+// AnalyticsStore is the Postgres model for pre-aggregated analytics via GORM.
+type AnalyticsStore struct {
+	db *gorm.DB
+}
+
+func NewAnalyticsStore(db *gorm.DB) *AnalyticsStore { return &AnalyticsStore{db: db} }
+
+func (s *AnalyticsStore) Migrate(ctx context.Context) error {
+	return s.db.WithContext(ctx).AutoMigrate(
+		&domain.DailyStats{},
+		&domain.Breakdown{},
+		&domain.LifetimeStats{},
+	)
+}
+
 // DailyIncrement, LifetimeIncrement, and BreakdownIncrement are the deltas a
 // worker batch applies atomically in one transaction.
 type DailyIncrement struct {
@@ -46,7 +61,7 @@ type BreakdownTotal struct {
 // additive, so a batch applied twice double-counts visits — the accepted
 // at-least-once window between apply and ack. Unique-visitor increments are
 // already deduplicated by the caller.
-func (s *Store) ApplyAnalytics(ctx context.Context, dailies []DailyIncrement, lifetimes []LifetimeIncrement, breakdowns []BreakdownIncrement) error {
+func (s *AnalyticsStore) ApplyAnalytics(ctx context.Context, dailies []DailyIncrement, lifetimes []LifetimeIncrement, breakdowns []BreakdownIncrement) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, d := range dailies {
 			if err := upsertDaily(tx, d); err != nil {
@@ -108,7 +123,7 @@ func upsertBreakdown(tx *gorm.DB, b BreakdownIncrement) error {
 }
 
 // GetLifetime returns the permanent per-link total.
-func (s *Store) GetLifetime(ctx context.Context, hostname, code string) (*domain.LifetimeStats, error) {
+func (s *AnalyticsStore) GetLifetime(ctx context.Context, hostname, code string) (*domain.LifetimeStats, error) {
 	var l domain.LifetimeStats
 	err := s.db.WithContext(ctx).Where("hostname = ? AND code = ?", hostname, code).First(&l).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -121,7 +136,7 @@ func (s *Store) GetLifetime(ctx context.Context, hostname, code string) (*domain
 }
 
 // SumDailyStats returns visits and unique visitors for a link within a window.
-func (s *Store) SumDailyStats(ctx context.Context, hostname, code string, from, to time.Time) (visits, uniques int64, err error) {
+func (s *AnalyticsStore) SumDailyStats(ctx context.Context, hostname, code string, from, to time.Time) (visits, uniques int64, err error) {
 	var row struct {
 		Visits  int64
 		Uniques int64
@@ -134,7 +149,7 @@ func (s *Store) SumDailyStats(ctx context.Context, hostname, code string, from, 
 }
 
 // GetTimeseries returns daily buckets for a link within a window, ascending.
-func (s *Store) GetTimeseries(ctx context.Context, hostname, code string, from, to time.Time) ([]domain.DailyStats, error) {
+func (s *AnalyticsStore) GetTimeseries(ctx context.Context, hostname, code string, from, to time.Time) ([]domain.DailyStats, error) {
 	var rows []domain.DailyStats
 	err := s.db.WithContext(ctx).
 		Where("hostname = ? AND code = ? AND day >= ? AND day <= ?", hostname, code, from, to).
@@ -143,7 +158,7 @@ func (s *Store) GetTimeseries(ctx context.Context, hostname, code string, from, 
 }
 
 // GetBreakdowns returns the top-N dimension values by count within a window.
-func (s *Store) GetBreakdowns(ctx context.Context, hostname, code, dimension string, from, to time.Time, limit int) ([]BreakdownTotal, error) {
+func (s *AnalyticsStore) GetBreakdowns(ctx context.Context, hostname, code, dimension string, from, to time.Time, limit int) ([]BreakdownTotal, error) {
 	var totals []BreakdownTotal
 	err := s.db.WithContext(ctx).Model(&domain.Breakdown{}).
 		Select("value, SUM(count) AS total").
@@ -154,7 +169,7 @@ func (s *Store) GetBreakdowns(ctx context.Context, hostname, code, dimension str
 
 // PruneAnalytics deletes daily rollups and breakdowns older than the
 // retention window. Lifetime totals are never pruned.
-func (s *Store) PruneAnalytics(ctx context.Context, before time.Time) error {
+func (s *AnalyticsStore) PruneAnalytics(ctx context.Context, before time.Time) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("day < ?", before).Delete(&domain.DailyStats{}).Error; err != nil {
 			return err

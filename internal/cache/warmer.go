@@ -14,7 +14,7 @@ type LinkSource interface {
 // Warm loads every active link into Redis. The redirector stays Redis-only:
 // misses are genuine unknowns or disabled links, so a warm cache prevents
 // false 404s after eviction or a cold start.
-func (c *Cache) Warm(ctx context.Context, src LinkSource) (int, error) {
+func (c *LinkCache) Warm(ctx context.Context, src LinkSource) (int, error) {
 	links, err := src.ListActive(ctx)
 	if err != nil {
 		return 0, err
