@@ -34,7 +34,7 @@ func envOr(key, def string) string {
 func main() {
 	cfg := loadConfig()
 	ctx := context.Background()
-	rdb := redisutil.Connect(ctx, cfg.redisAddr)
+	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 50, 5))
 	linkCache := cache.NewLinkCache(rdb)
 	analyticsCache := cache.NewAnalyticsCache(rdb)
 

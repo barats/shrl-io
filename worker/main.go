@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"os"
 	"os/signal"
@@ -10,14 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"github.com/redis/go-redis/v9"
 
 	"github.com/barats/shrl-io/internal/analytics"
 	"github.com/barats/shrl-io/internal/cache"
+	"github.com/barats/shrl-io/internal/dbutil"
 	"github.com/barats/shrl-io/internal/geo"
 	"github.com/barats/shrl-io/internal/redisutil"
 	"github.com/barats/shrl-io/internal/store"
@@ -62,10 +58,10 @@ func main() {
 	cfg := loadConfig()
 	ctx := context.Background()
 
-	rdb := redisutil.Connect(ctx, cfg.redisAddr)
+	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	defer rdb.Close()
 
-	db := openPostgres(ctx, cfg.databaseURL)
+	db := dbutil.Open(ctx, dbutil.ConfigFromEnv(cfg.databaseURL))
 	analyticsStore := store.NewAnalyticsStore(db)
 	if err := analyticsStore.Migrate(ctx); err != nil {
 		log.Fatalf("migrate analytics: %v", err)
@@ -189,28 +185,4 @@ func prune(ctx context.Context, st *store.AnalyticsStore, retentionDays int) {	c
 		return
 	}
 	log.Printf("pruned analytics older than %s", cutoff.Format("2006-01-02"))
-}
-
-func openPostgres(ctx context.Context, dsn string) *gorm.DB {
-	var db *gorm.DB
-	var err error
-	for attempt := 0; attempt < 30; attempt++ {
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:         gormlogger.Default.LogMode(gormlogger.Warn),
-			TranslateError: true,
-		})
-		if err == nil {
-			var sqlDB *sql.DB
-			if sqlDB, err = db.DB(); err == nil {
-				err = sqlDB.PingContext(ctx)
-			}
-		}
-		if err == nil {
-			return db
-		}
-		log.Printf("waiting for postgres: %v", err)
-		time.Sleep(2 * time.Second)
-	}
-	log.Fatalf("postgres never became ready: %v", err)
-	return nil
 }

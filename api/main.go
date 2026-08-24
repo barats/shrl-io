@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
@@ -12,11 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"github.com/barats/shrl-io/internal/cache"
+	"github.com/barats/shrl-io/internal/dbutil"
 	"github.com/barats/shrl-io/internal/domain"
 	"github.com/barats/shrl-io/internal/redisutil"
 	"github.com/barats/shrl-io/internal/store"
@@ -74,7 +70,7 @@ func main() {
 	}
 	ctx := context.Background()
 
-	db := openPostgres(ctx, cfg.databaseURL)
+	db := dbutil.Open(ctx, dbutil.ConfigFromEnv(cfg.databaseURL))
 	links := store.NewLinkStore(db)
 	analytics := store.NewAnalyticsStore(db)
 	if err := links.Migrate(ctx); err != nil {
@@ -84,7 +80,7 @@ func main() {
 		log.Fatalf("migrate analytics: %v", err)
 	}
 
-	rdb := redisutil.Connect(ctx, cfg.redisAddr)
+	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
 	s := &server{links: links, analytics: analytics, linkCache: linkCache, cfg: cfg}
 
@@ -111,30 +107,6 @@ func main() {
 
 	log.Printf("api listening on %s", cfg.addr)
 	log.Fatal(http.ListenAndServe(cfg.addr, s.auth(mux)))
-}
-
-func openPostgres(ctx context.Context, dsn string) *gorm.DB {
-	var db *gorm.DB
-	var err error
-	for attempt := 0; attempt < 30; attempt++ {
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:         gormlogger.Default.LogMode(gormlogger.Warn),
-			TranslateError: true,
-		})
-		if err == nil {
-			var sqlDB *sql.DB
-			if sqlDB, err = db.DB(); err == nil {
-				err = sqlDB.PingContext(ctx)
-			}
-		}
-		if err == nil {
-			return db
-		}
-		log.Printf("waiting for postgres: %v", err)
-		time.Sleep(2 * time.Second)
-	}
-	log.Fatalf("postgres never became ready: %v", err)
-	return nil
 }
 
 func warm(ctx context.Context, st *store.LinkStore, ca *cache.LinkCache) {
@@ -199,7 +171,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 				s.linkCache.Put(r.Context(), l)
 				writeJSON(w, http.StatusCreated, l)
 				return
-			} else if errors.Is(err, gorm.ErrDuplicatedKey) {
+			} else if errors.Is(err, store.ErrDuplicatedKey) {
 				continue // auto codes never reuse an existing code
 			} else {
 				writeError(w, http.StatusInternalServerError, "failed to create link")
@@ -216,7 +188,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 	}
 	l := &domain.Link{Hostname: hostname, Code: req.Code, Destination: dest}
 	if err := s.links.Create(r.Context(), l); err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
+		if errors.Is(err, store.ErrDuplicatedKey) {
 			writeError(w, http.StatusConflict, "code already exists on this hostname")
 		} else {
 			writeError(w, http.StatusInternalServerError, "failed to create link")

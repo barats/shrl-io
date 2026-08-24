@@ -12,6 +12,10 @@ import (
 // ErrNotFound is returned when a link does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrDuplicatedKey is returned when a link with the same hostname+code already
+// exists. It wraps the driver's unique-violation error.
+var ErrDuplicatedKey = errors.New("duplicate key")
+
 // LinkStore is the Postgres write model for links via GORM. Dialect-neutral:
 // the same model and queries work with the MySQL driver.
 type LinkStore struct {
@@ -25,7 +29,11 @@ func (s *LinkStore) Migrate(ctx context.Context) error {
 }
 
 func (s *LinkStore) Create(ctx context.Context, l *domain.Link) error {
-	return s.db.WithContext(ctx).Create(l).Error
+	err := s.db.WithContext(ctx).Create(l).Error
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return ErrDuplicatedKey
+	}
+	return err
 }
 
 func (s *LinkStore) Get(ctx context.Context, hostname, code string) (*domain.Link, error) {
