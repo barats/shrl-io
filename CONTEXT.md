@@ -12,13 +12,21 @@ _Avoid_: Short URL, shortlink, tiny URL
 
 **Code**:
 The identifier segment of a Link's short URL, e.g. `abc123` in `shrl.io/abc123`.
-Together with its `Hostname`, uniquely identifies the `Link`. Case-sensitive;
-unique per `Hostname`; never automatically reused after a `Link` is deleted.
+Together with its `Hostname`, uniquely identifies the `Link`. Always generated
+by shrl.io; a `User` never chooses a `Code`. Unique per `Hostname`; never
+automatically reused after a `Link` is deleted.
 _Avoid_: slug, key
 
 **Hostname**:
-The domain that serves a `Link`; one half of a `Link`'s identity.
+A domain an `Admin` registers in the Hostname Registry, on which `Link`s are
+served; one half of a `Link`'s identity. Every `User` may create `Link`s under
+any registered `Hostname`.
 _Avoid_: domain, brand
+
+**Hostname Registry**:
+The set of `Hostname`s an `Admin` has registered; the universe a `User` may
+select from when creating a `Link`.
+_Avoid_: hostname list, allowed domains
 
 **Destination**:
 The URL a `Link` redirects to.
@@ -64,8 +72,9 @@ A person with an account who signs in and manages Links. Every Link has a
 _Avoid_: member, account holder
 
 **Admin**:
-A `User` with the privilege to create accounts and manage the instance. The
-first account provisioned on first run is an `Admin`.
+A `User` with the privilege to create accounts, register and remove
+`Hostname`s, and manage the instance. The first account provisioned on first
+run is an `Admin`.
 _Avoid_: superuser, owner, root
 
 **Creator**:

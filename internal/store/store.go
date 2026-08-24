@@ -64,18 +64,6 @@ func (s *LinkStore) ListActive(ctx context.Context) ([]domain.Link, error) {
 	return links, err
 }
 
-// ListHostnames returns every hostname on which the creator has a link, sorted.
-func (s *LinkStore) ListHostnames(ctx context.Context, creatorID int64) ([]string, error) {
-	var hostnames []string
-	err := s.db.WithContext(ctx).
-		Model(&domain.Link{}).
-		Where("created_by = ?", creatorID).
-		Distinct().
-		Order("hostname ASC").
-		Pluck("hostname", &hostnames).Error
-	return hostnames, err
-}
-
 func (s *LinkStore) Save(ctx context.Context, l *domain.Link) error {
 	return s.db.WithContext(ctx).Save(l).Error
 }

@@ -15,8 +15,8 @@ func TestGenerateCode(t *testing.T) {
 			t.Fatalf("length = %d, want %d", len(c), AutoCodeLength)
 		}
 		for _, ch := range c {
-			if !strings.ContainsRune(base62Alphabet, ch) {
-				t.Fatalf("character %q not in base62 alphabet", ch)
+			if !strings.ContainsRune(codeAlphabet, ch) {
+				t.Fatalf("character %q not in code alphabet", ch)
 			}
 		}
 	}
@@ -36,17 +36,15 @@ func TestGenerateCodeUniqueness(t *testing.T) {
 	}
 }
 
-func TestValidateCustomCode(t *testing.T) {
-	valid := []string{"abc", "ABC123", "a_b-c", "x", "A"}
-	for _, c := range valid {
-		if err := ValidateCustomCode(c); err != nil {
-			t.Errorf("valid code %q rejected: %v", c, err)
+func TestGenerateCodeAlphabetExcludesConfusables(t *testing.T) {
+	for _, ch := range "lo01" {
+		if strings.ContainsRune(codeAlphabet, ch) {
+			t.Fatalf("confusable character %q in alphabet", ch)
 		}
 	}
-	invalid := []string{"", "ab cd", "a/b", "a!b", "a.b", strings.Repeat("a", 33)}
-	for _, c := range invalid {
-		if err := ValidateCustomCode(c); err == nil {
-			t.Errorf("invalid code %q accepted", c)
+	for _, ch := range codeAlphabet {
+		if ch >= 'A' && ch <= 'Z' {
+			t.Fatalf("uppercase character %q in alphabet", ch)
 		}
 	}
 }

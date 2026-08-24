@@ -42,11 +42,10 @@ teams and individuals who want full control over their link data.
 
 ### Link management
 
-- **Auto codes**: 6-character, case-sensitive base62 **Codes** are generated
-  for you; custom Codes of 1–32 characters (`[A-Za-z0-9_-]`) are also
-  supported.
-- **Multiple hostnames**: one instance can serve Links on several Hostnames;
-  a Code is unique per Hostname and case-sensitive.
+- **Auto codes**: shrl.io generates every **Code**: 6 characters, lowercase,
+  from an unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code.
+- **Admin-managed hostnames**: an **Admin** registers **Hostnames**; Users
+  select from the registry when creating a Link. A Code is unique per Hostname.
 - **Full lifecycle**: create, list, get, update the Destination, disable,
   enable, or delete a Link.
 - **Disabled** Links return 404 from the redirector (reversible — the Link and
@@ -184,7 +183,8 @@ Services:
 
 Then visit `http://localhost:8080/{code}` — you get a 302 to the destination.
 
-The API `hostname` defaults to `SHRL_DEFAULT_HOSTNAME` (`localhost`), or pass
+The API `hostname` must be a registered Hostname (admin-managed); it defaults to
+`SHRL_DEFAULT_HOSTNAME` (`localhost`, auto-registered on first run), or pass
 `?hostname=` / a `hostname` field to target another.
 
 ### Analytics (the worker aggregates visits from the Redis stream)
@@ -220,7 +220,7 @@ All services are configured via environment variables.
 | `SHRL_REDIS_ADDR`       | `localhost:6379`                                     | all           | Redis address                                    |
 | `SHRL_API_ADDR`         | `:8080`                                              | api           | API listen address                               |
 | `SHRL_REDIRECTOR_ADDR`  | `:8080`                                              | redirector    | Redirector listen address                        |
-| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, frontend| Hostname used when a request specifies none      |
+| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, frontend| Hostname auto-registered on first run; used when a request specifies none |
 | `SHRL_RETENTION_DAYS`   | `365`                                                | api, worker   | Analytics retention window (daily rollups)       |
 | `SHRL_GEOLITE_LICENSE`  | *(unset)*                                            | worker        | MaxMind license key; enables GeoIP attribution   |
 | `SHRL_GEOLITE_DB_PATH`  | `/data/GeoLite2-City.mmdb`                           | worker        | Path to the GeoLite2 City database               |
@@ -242,9 +242,11 @@ User sees only the Links they created.
 | GET    | `/me`                                  | The authenticated user                              |
 | GET    | `/users`                               | List users (admin only)                             |
 | POST   | `/users`                               | Create a user (admin only); password returned once  |
-| POST   | `/links`                               | Create a Link (auto or custom Code)                 |
+| POST   | `/links`                               | Create a Link (Code is auto-generated)              |
 | GET    | `/links`                               | List the current user's Links for a Hostname        |
-| GET    | `/hostnames`                           | List Hostnames the current user has Links on        |
+| GET    | `/hostnames`                           | List registered Hostnames (the registry)            |
+| POST   | `/hostnames`                           | Register a Hostname (admin only)                    |
+| DELETE | `/hostnames/{hostname}`                | Remove a Hostname from the registry (admin only)    |
 | GET    | `/links/{code}`                        | Get a Link                                          |
 | PATCH  | `/links/{code}`                        | Update a Link's Destination                         |
 | POST   | `/links/{code}/disable`                | Disable a Link (redirector returns 404)             |
@@ -259,7 +261,8 @@ A Link is a JSON object: `hostname`, `code`, `destination`, `disabled`,
 
 Query parameters:
 
-- `hostname` (all endpoints) — defaults to `SHRL_DEFAULT_HOSTNAME`.
+- `hostname` (all endpoints) — defaults to `SHRL_DEFAULT_HOSTNAME`; must be a
+  registered Hostname.
 - `from` / `to` (analytics reads) — `YYYY-MM-DD` bounds; default to the
   retention window.
 - `dimension` (breakdowns) — one of the analytics dimensions, default

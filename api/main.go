@@ -63,6 +63,7 @@ type server struct {
 	links     *store.LinkStore
 	analytics *store.AnalyticsStore
 	users     *store.UserStore
+	hostnames *store.HostnameStore
 	linkCache *cache.LinkCache
 	cfg       config
 }
@@ -75,6 +76,7 @@ func main() {
 	links := store.NewLinkStore(db)
 	analytics := store.NewAnalyticsStore(db)
 	users := store.NewUserStore(db)
+	hostnames := store.NewHostnameStore(db)
 	if err := links.Migrate(ctx); err != nil {
 		log.Fatalf("migrate links: %v", err)
 	}
@@ -84,11 +86,15 @@ func main() {
 	if err := users.Migrate(ctx); err != nil {
 		log.Fatalf("migrate users: %v", err)
 	}
+	if err := hostnames.Migrate(ctx); err != nil {
+		log.Fatalf("migrate hostnames: %v", err)
+	}
 	bootstrapAdmin(ctx, users, cfg)
+	bootstrapHostnames(ctx, hostnames, cfg)
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	s := &server{links: links, analytics: analytics, users: users, linkCache: linkCache, cfg: cfg}
+	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, linkCache: linkCache, cfg: cfg}
 
 	go func() {
 		warm(ctx, links, linkCache)
@@ -108,6 +114,8 @@ func main() {
 	mux.HandleFunc("POST /links", s.createLink)
 	mux.HandleFunc("GET /links", s.listLinks)
 	mux.HandleFunc("GET /hostnames", s.listHostnames)
+	mux.HandleFunc("POST /hostnames", s.createHostname)
+	mux.HandleFunc("DELETE /hostnames/{hostname}", s.deleteHostname)
 	mux.HandleFunc("GET /links/{code}", s.getLink)
 	mux.HandleFunc("PATCH /links/{code}", s.updateLink)
 	mux.HandleFunc("POST /links/{code}/disable", s.disableLink)
@@ -160,6 +168,22 @@ func bootstrapAdmin(ctx context.Context, users *store.UserStore, cfg config) {
 	log.Printf("provisioned admin user %q (password shown only once): %s", u.Username, password)
 }
 
+// bootstrapHostnames registers the default hostname in the registry so a fresh
+// instance always has a selectable hostname.
+func bootstrapHostnames(ctx context.Context, st *store.HostnameStore, cfg config) {
+	name, err := domain.NormalizeAndValidateHostname(cfg.defaultHostname)
+	if err != nil {
+		log.Printf("skip default hostname %q: %v", cfg.defaultHostname, err)
+		return
+	}
+	if _, err := st.Get(ctx, name); err == nil {
+		return
+	}
+	if err := st.Create(ctx, &domain.Hostname{Name: name}); err != nil && !errors.Is(err, store.ErrDuplicatedKey) {
+		log.Printf("register default hostname: %v", err)
+	}
+}
+
 func warm(ctx context.Context, st *store.LinkStore, ca *cache.LinkCache) {
 	n, err := ca.Warm(ctx, st)
 	if err != nil {
@@ -193,7 +217,6 @@ func (s *server) ownedLink(w http.ResponseWriter, r *http.Request, code string) 
 func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Hostname    string `json:"hostname"`
-		Code        string `json:"code"`
 		Destination string `json:"destination"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -204,6 +227,15 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 	if hostname == "" {
 		hostname = s.cfg.defaultHostname
 	}
+	hostname, err := domain.NormalizeAndValidateHostname(hostname)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := s.hostnames.Get(r.Context(), hostname); err != nil {
+		writeError(w, http.StatusBadRequest, "hostname is not registered")
+		return
+	}
 	dest, err := domain.NormalizeAndValidateDestination(req.Destination)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -211,44 +243,25 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 	}
 	creator := currentUser(r).ID
 
-	if req.Code == "" {
-		for attempt := 0; attempt < 8; attempt++ {
-			code, err := domain.GenerateCode()
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "code generation failed")
-				return
-			}
-			l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, CreatedBy: creator}
-			if err := s.links.Create(r.Context(), l); err == nil {
-				s.linkCache.Put(r.Context(), l)
-				writeJSON(w, http.StatusCreated, l)
-				return
-			} else if errors.Is(err, store.ErrDuplicatedKey) {
-				continue // auto codes never reuse an existing code
-			} else {
-				writeError(w, http.StatusInternalServerError, "failed to create link")
-				return
-			}
+	for attempt := 0; attempt < 8; attempt++ {
+		code, err := domain.GenerateCode()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "code generation failed")
+			return
 		}
-		writeError(w, http.StatusInternalServerError, "could not allocate a unique code")
-		return
-	}
-
-	if err := domain.ValidateCustomCode(req.Code); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	l := &domain.Link{Hostname: hostname, Code: req.Code, Destination: dest, CreatedBy: creator}
-	if err := s.links.Create(r.Context(), l); err != nil {
-		if errors.Is(err, store.ErrDuplicatedKey) {
-			writeError(w, http.StatusConflict, "code already exists on this hostname")
+		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, CreatedBy: creator}
+		if err := s.links.Create(r.Context(), l); err == nil {
+			s.linkCache.Put(r.Context(), l)
+			writeJSON(w, http.StatusCreated, l)
+			return
+		} else if errors.Is(err, store.ErrDuplicatedKey) {
+			continue // auto codes never reuse an existing code
 		} else {
 			writeError(w, http.StatusInternalServerError, "failed to create link")
+			return
 		}
-		return
 	}
-	s.linkCache.Put(r.Context(), l)
-	writeJSON(w, http.StatusCreated, l)
+	writeError(w, http.StatusInternalServerError, "could not allocate a unique code")
 }
 
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
@@ -269,18 +282,6 @@ func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
 		links = []domain.Link{}
 	}
 	writeJSON(w, http.StatusOK, links)
-}
-
-func (s *server) listHostnames(w http.ResponseWriter, r *http.Request) {
-	hostnames, err := s.links.ListHostnames(r.Context(), currentUser(r).ID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list hostnames")
-		return
-	}
-	if hostnames == nil {
-		hostnames = []string{}
-	}
-	writeJSON(w, http.StatusOK, hostnames)
 }
 
 func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
