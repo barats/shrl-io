@@ -78,6 +78,15 @@ teams and individuals who want full control over their link data.
 - **Login**: sign in with username + password; the UI issues an HttpOnly
   session cookie and proxies API calls server-side with the user's token, so
   the password and token never reach the browser.
+- **Change password**: a User replaces their own password on the Account
+  page; doing so revokes every other sign-in and every API key, keeping only
+  the current session.
+- **API keys**: long-lived, named bearer credentials for scripts and CI,
+  created and revoked per User on the Account page, shown once at creation,
+  and revoked on a password change.
+- **Admin password reset**: an Admin resets a forgotten password to a
+  generated temporary one (shown once); the User must change it on their next
+  sign-in before using the instance. There is no SMTP-based reset.
 - **Link management**: each User sees and manages only their own Links, per
   Hostname: create, edit the Destination, disable/enable, and delete.
 - **Analytics view**: lifetime and window totals, a daily visits chart, and
@@ -168,7 +177,6 @@ Planned, not yet built:
   (the base dashboard UI now ships with charts)
 - **QR code generation** for every Link, with download
 - **Rate limiting** on the API and redirector
-- **Password change & reset**, per-user API keys
 - **UTM campaign tracking**
 
 ## Development
@@ -265,6 +273,11 @@ Team they belong to.
 | GET    | `/users`                               | List users (admin only)                             |
 | POST   | `/users`                               | Create a user (admin only); password returned once  |
 | DELETE | `/users/{id}`                          | Delete a user (admin only): removes Personal Links and memberships; Team Links stay with the Team |
+| POST   | `/users/{id}/reset`                   | Reset a user's password (admin only); temp password shown once, forced change on next sign-in |
+| POST   | `/account/password`                   | Change your own password; revokes other tokens and all API keys |
+| POST   | `/keys`                               | Create an API key; the secret is shown once          |
+| GET    | `/keys`                               | List your API keys                                   |
+| DELETE | `/keys/{id}`                          | Revoke an API key                                    |
 | POST   | `/links`                               | Create a Link (Code auto-generated; Remark optional) |
 | GET    | `/links`                               | List the current user's Links for a Hostname        |
 | GET    | `/hostnames`                           | List registered Hostnames (the registry)            |

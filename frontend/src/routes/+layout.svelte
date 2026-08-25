@@ -23,22 +23,23 @@
 
 {#if !isLogin}
 	<header class="border-b bg-background">
-		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+		<div class="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
 			<div class="flex items-center gap-6">
 				<a href="/" class="flex items-center gap-1.5 text-lg font-semibold tracking-tight">
 					<Link2 class="size-5" />
-					shrl.io
+					<span class="hidden sm:inline">shrl.io</span>
 				</a>
 				<nav class="flex items-center gap-4">
 					<a href="/" class="text-sm text-muted-foreground hover:text-foreground">Links</a>
 					<a href="/teams" class="text-sm text-muted-foreground hover:text-foreground">Teams</a>
+					<a href="/account" class="text-sm text-muted-foreground hover:text-foreground">Account</a>
 					{#if data?.user?.isAdmin}
 						<a href="/settings" class="text-sm text-muted-foreground hover:text-foreground">Settings</a>
 					{/if}
 				</nav>
 			</div>
 			<div class="flex items-center gap-3">
-				<span class="text-sm text-muted-foreground">{data?.user?.username}</span>
+				<span class="hidden text-sm text-muted-foreground sm:inline">{data?.user?.username}</span>
 				<Button variant="outline" onclick={logout}>
 					<LogOut class="size-4" />
 					Log out

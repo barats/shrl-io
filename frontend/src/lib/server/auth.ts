@@ -7,6 +7,9 @@ export interface SessionData {
 	token: string;
 	username: string;
 	isAdmin: boolean;
+	// Set when the user logged in with a temporary password from an admin
+	// reset and must replace it before using the instance (ADR 0012).
+	mustChangePassword?: boolean;
 	exp: number;
 }
 

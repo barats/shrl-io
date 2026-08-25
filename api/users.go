@@ -82,6 +82,55 @@ func (s *server) createUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// resetUserPassword gives a user a generated temporary password shown once,
+// flags it for forced change on their next login, and revokes their tokens and
+// keys. There is no SMTP in the stack, so reset is admin-mediated (ADR 0012).
+func (s *server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	if _, err := s.users.GetByID(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	password, err := domain.GeneratePassword(20)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "password generation failed")
+		return
+	}
+	hash, err := domain.HashPassword(password)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "password hashing failed")
+		return
+	}
+	if err := s.users.SetPassword(r.Context(), id, hash); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to set password")
+		return
+	}
+	if err := s.users.RequirePasswordChange(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to flag password change")
+		return
+	}
+	if err := s.users.DeleteTokensForUser(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to revoke tokens")
+		return
+	}
+	if err := s.users.DeleteKeysForUser(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to revoke keys")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"password": password})
+}
+
 // deleteUser removes a user (admin only). Their Personal Links, bearer
 // tokens, and memberships are removed; Team Links they created stay with the
 // Team (the fixed-team rule), leaving created_by as a dangling id. A user who

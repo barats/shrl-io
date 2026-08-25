@@ -1,5 +1,6 @@
 import type {
 	AnalyticsResponse,
+	ApiKey,
 	BreakdownResponse,
 	InviteCode,
 	Link,
@@ -24,6 +25,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 			msg = (JSON.parse(text) as { error?: string }).error ?? msg;
 		} catch {
 			if (text) msg = text;
+		}
+		if (typeof window !== 'undefined' && res.status === 403 && msg === 'password change required') {
+			// A temp-password user can only change their password until they do.
+			window.location.assign('/account');
 		}
 		throw new Error(msg);
 	}
@@ -245,6 +250,36 @@ export const api = {
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ code })
 		});
+	},
+
+	// --- Account ---
+
+	async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+		return req('account/password', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+		});
+	},
+
+	async listApiKeys(): Promise<ApiKey[]> {
+		return req<ApiKey[]>('keys');
+	},
+
+	async createApiKey(name: string): Promise<{ api_key: ApiKey; secret: string }> {
+		return req<{ api_key: ApiKey; secret: string }>('keys', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ name })
+		});
+	},
+
+	async revokeApiKey(id: number): Promise<void> {
+		return req<void>(`keys/${id}`, { method: 'DELETE' });
+	},
+
+	async resetUserPassword(id: number): Promise<{ password: string }> {
+		return req<{ password: string }>(`users/${id}/reset`, { method: 'POST' });
 	}
 };
 

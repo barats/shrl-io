@@ -1,5 +1,5 @@
 import { config } from '$lib/server/config';
-import { readSession } from '$lib/server/auth';
+import { clearSessionCookie, readSession } from '$lib/server/auth';
 import type { RequestHandler } from './$types';
 
 async function proxy(request: Request, path: string): Promise<Response> {
@@ -24,9 +24,20 @@ async function proxy(request: Request, path: string): Promise<Response> {
 
 	const res = await fetch(target, { method: request.method, headers, body });
 
+	const responseHeaders = new Headers();
+	const responseContentType = res.headers.get('content-type');
+	if (responseContentType) responseHeaders.set('content-type', responseContentType);
+	// A 401 means the session token was rejected (expired, revoked, or
+	// replaced server-side). Clear the cookie so the login page does not see a
+	// stale session and bounce the user straight back to '/'.
+	if (res.status === 401) {
+		const cleared = clearSessionCookie();
+		if (cleared) responseHeaders.set('set-cookie', cleared);
+	}
+
 	return new Response(res.body, {
 		status: res.status,
-		headers: { 'content-type': res.headers.get('content-type') ?? 'application/json' }
+		headers: responseHeaders
 	});
 }
 

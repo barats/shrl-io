@@ -29,6 +29,7 @@ export async function POST({ request }) {
 		token: data.token,
 		username: data.user.username,
 		isAdmin: data.user.is_admin,
+		mustChangePassword: data.user.must_change_password === true,
 		exp: Math.floor(Date.now() / 1000) + config.sessionTtlSeconds
 	});
 

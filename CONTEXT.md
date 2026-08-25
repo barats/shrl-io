@@ -140,8 +140,15 @@ _Avoid_: passphrase, key
 **Token**:
 The bearer credential a `User` receives at Login and presents on every API
 request (`Authorization: Bearer`). Stored as a SHA-256 hash and revocable at
-Logout.
-_Avoid_: API key, secret
+Logout. Short-lived and tied to a `Login`; distinct from an `API Key`.
+_Avoid_: secret
+
+**API Key**:
+A long-lived bearer credential a `User` creates, names, and revokes for
+programmatic access to the API. Presented as `Authorization: Bearer` like a
+`Token`, but never expires and is never shown again after creation. Currently
+unscoped: a Key grants the same powers as its owner's `Login`.
+_Avoid_: PAT, secret
 
 **Session**:
 An authenticated browser context for a `User` in the UI, established by a

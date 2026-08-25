@@ -67,7 +67,7 @@ func newTestServer(t *testing.T) *server {
 		teams:     store.NewTeamStore(db),
 		invites:   store.NewInviteStore(db),
 		linkCache: cache.NewLinkCache(client),
-		cfg:       config{defaultHostname: "localhost", retentionDays: 30},
+		cfg:       config{defaultHostname: "localhost", retentionDays: 30, tokenTTL: time.Hour},
 	}
 }
 

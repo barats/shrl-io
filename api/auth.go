@@ -28,18 +28,26 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
+// authenticate resolves a bearer credential to a user. The credential may be
+// a login Token (TTL-bounded) or an API Key (no expiry); both share the
+// Authorization: Bearer path and the SHA-256 hash lookup.
 func (s *server) authenticate(ctx context.Context, token string) (*domain.User, error) {
-	t, err := s.users.TokenByHash(ctx, domain.HashToken(token))
-	if err != nil {
-		return nil, err
+	hash := domain.HashToken(token)
+	if t, err := s.users.TokenByHash(ctx, hash); err == nil {
+		if time.Now().After(t.ExpiresAt) {
+			return nil, store.ErrNotFound
+		}
+		return s.users.GetByID(ctx, t.UserID)
 	}
-	if time.Now().After(t.ExpiresAt) {
-		return nil, store.ErrNotFound
+	if k, err := s.users.KeyByHash(ctx, hash); err == nil {
+		return s.users.GetByID(ctx, k.UserID)
 	}
-	return s.users.GetByID(ctx, t.UserID)
+	return nil, store.ErrNotFound
 }
 
-// auth guards every route except login/logout with a bearer token.
+// auth guards every route except login/logout with a bearer token. A user
+// flagged must-change-password (temp password from an admin reset) may only
+// change their password or inspect their own account until it is replaced.
 func (s *server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/login" || r.URL.Path == "/logout" {
@@ -54,6 +62,10 @@ func (s *server) auth(next http.Handler) http.Handler {
 		u, err := s.authenticate(r.Context(), token)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if u.MustChangePassword && r.URL.Path != "/account/password" && r.URL.Path != "/me" {
+			writeError(w, http.StatusForbidden, "password change required")
 			return
 		}
 		ctx := context.WithValue(r.Context(), userKey, u)

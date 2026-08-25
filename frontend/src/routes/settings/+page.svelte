@@ -46,6 +46,9 @@
 	let creatingUser = $state(false);
 	let userCreateError = $state('');
 	let generatedPassword = $state('');
+	let resetting = $state<number | null>(null);
+	let resetResult = $state('');
+	let resetFor = $state('');
 	let deleting = $state<number | null>(null);
 	let userActionError = $state('');
 
@@ -150,6 +153,27 @@
 			userActionError = (e as Error).message;
 		} finally {
 			deleting = null;
+		}
+	}
+
+	async function resetPassword(user: User) {
+		if (
+			!window.confirm(
+				`Reset ${user.username}'s password? Their current sign-ins and API keys are revoked.`
+			)
+		)
+			return;
+		resetting = user.id;
+		userActionError = '';
+		resetResult = '';
+		try {
+			const res = await api.resetUserPassword(user.id);
+			resetResult = res.password;
+			resetFor = user.username;
+		} catch (e) {
+			userActionError = (e as Error).message;
+		} finally {
+			resetting = null;
 		}
 	}
 
@@ -274,6 +298,16 @@
 					<AlertDescription>{userActionError}</AlertDescription>
 				</Alert>
 			{/if}
+			{#if resetResult}
+				<Alert class="mb-4">
+					<KeyRound class="size-4" />
+					<AlertTitle>Password reset — shown once for {resetFor}</AlertTitle>
+					<AlertDescription>
+						Share this temporary password; the user is asked to change it on next sign-in:
+						<span class="mt-2 block font-mono font-semibold">{resetResult}</span>
+					</AlertDescription>
+				</Alert>
+			{/if}
 			{#if uError}
 				<Alert variant="destructive" class="mb-4">
 					<TriangleAlert class="size-4" />
@@ -311,15 +345,30 @@
 									{user.created_at.slice(0, 10)}
 								</TableCell>
 								<TableCell>
-									<Button
-										variant="ghost"
-										size="icon-sm"
-										title={user.id === me?.id ? 'You cannot delete your own account' : 'Delete user'}
-										disabled={user.id === me?.id || deleting === user.id}
-										onclick={() => deleteUser(user)}
-									>
-										<Trash2 class="size-4" />
-									</Button>
+									<span class="flex items-center justify-end gap-1">
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											title={
+												user.id === me?.id
+													? 'You cannot reset your own password here — use Account'
+													: 'Reset password'
+											}
+											disabled={user.id === me?.id || resetting === user.id}
+											onclick={() => resetPassword(user)}
+										>
+											<KeyRound class="size-4" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											title={user.id === me?.id ? 'You cannot delete your own account' : 'Delete user'}
+											disabled={user.id === me?.id || deleting === user.id}
+											onclick={() => deleteUser(user)}
+										>
+											<Trash2 class="size-4" />
+										</Button>
+									</span>
 								</TableCell>
 							</TableRow>
 						{/each}

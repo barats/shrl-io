@@ -17,7 +17,7 @@ type UserStore struct {
 func NewUserStore(db *gorm.DB) *UserStore { return &UserStore{db: db} }
 
 func (s *UserStore) Migrate(ctx context.Context) error {
-	return s.db.WithContext(ctx).AutoMigrate(&domain.User{}, &domain.Token{})
+	return s.db.WithContext(ctx).AutoMigrate(&domain.User{}, &domain.Token{}, &domain.APIKey{})
 }
 
 func (s *UserStore) Count(ctx context.Context) (int64, error) {
@@ -85,6 +85,36 @@ func (s *UserStore) DeleteToken(ctx context.Context, id int64) error {
 	return s.db.WithContext(ctx).Delete(&domain.Token{}, id).Error
 }
 
+// SetPassword replaces a user's password hash and clears the forced-change
+// flag, completing a self-service change or an admin-issued reset.
+func (s *UserStore) SetPassword(ctx context.Context, id int64, hash string) error {
+	return s.db.WithContext(ctx).Model(&domain.User{}).
+		Where("id = ?", id).
+		Updates(map[string]any{"password_hash": hash, "must_change_password": false}).Error
+}
+
+// RequirePasswordChange flags a user as needing a new password on next login
+// (the temp password from an admin-issued reset).
+func (s *UserStore) RequirePasswordChange(ctx context.Context, id int64) error {
+	return s.db.WithContext(ctx).Model(&domain.User{}).
+		Where("id = ?", id).
+		Update("must_change_password", true).Error
+}
+
+// DeleteTokensForUser removes every login token for a user.
+func (s *UserStore) DeleteTokensForUser(ctx context.Context, userID int64) error {
+	return s.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&domain.Token{}).Error
+}
+
+// DeleteTokensForUserExcept removes every login token for a user except the
+// one presented on the current request, so a password change keeps the
+// current session alive while revoking everything else.
+func (s *UserStore) DeleteTokensForUserExcept(ctx context.Context, userID int64, keepHash string) error {
+	return s.db.WithContext(ctx).
+		Where("user_id = ? AND hash <> ?", userID, keepHash).
+		Delete(&domain.Token{}).Error
+}
+
 // AssignLinksToCreator backfills links with no creator to the given user,
 // used at first-run bootstrap for pre-existing links.
 func (s *UserStore) AssignLinksToCreator(ctx context.Context, userID int64) error {
@@ -94,12 +124,15 @@ func (s *UserStore) AssignLinksToCreator(ctx context.Context, userID int64) erro
 		Update("created_by", userID).Error
 }
 
-// Delete removes a user and everything owned by them: bearer tokens,
-// memberships, and Personal Links. Team Links they created stay with the Team
-// (the fixed-team rule), leaving created_by as a dangling id.
+// Delete removes a user and everything owned by them: bearer tokens, API
+// keys, memberships, and Personal Links. Team Links they created stay with
+// the Team (the fixed-team rule), leaving created_by as a dangling id.
 func (s *UserStore) Delete(ctx context.Context, id int64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_id = ?", id).Delete(&domain.Token{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", id).Delete(&domain.APIKey{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("user_id = ?", id).Delete(&domain.TeamMember{}).Error; err != nil {
