@@ -1,5 +1,10 @@
 # Teams own Links; members read them, creators and team owners manage them
 
+> **Status: partially superseded by ADR 0010** — the Team-ownership and
+> read-only-member model stands; the membership mechanism changes: Team Owners
+> now generate single-use Invite Codes instead of adding members by username,
+> and direct add is admin-only.
+
 Shrl.io gains a Team: a group of Users created by an Admin, and the ownership
 boundary for Links. A Link belongs to exactly one Team or is Personal (no
 Team); it is created in that context and can never be transferred — when a
@@ -24,6 +29,6 @@ redirect.
 We rejected link transfer between Teams (the space a Link is born in is its
 only home — avoids reassignment bugs and surprise data movement), read-write
 access for plain members (read-only keeps accidental damage out of shared
-Links; stewards are explicit), and an invite-and-accept membership flow (no
-pending state, no acceptance UI, on a self-hosted instance). Joining a Team
-never moves existing Personal Links.
+Links; stewards are explicit), and an invite-and-accept membership flow
+(superseded by ADR 0010: membership now runs on single-use Invite Codes).
+Joining a Team never moves existing Personal Links.

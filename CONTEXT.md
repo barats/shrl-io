@@ -96,14 +96,21 @@ _Avoid_: author
 **Personal Link**:
 A `Link` with no `Team`, visible and manageable only by its `Creator`. The
 scope for Users who belong to no Team or choose not to assign a Link to a Team.
+The counterpart of a `Team Link`.
 _Avoid_: private link, individual link
 
 **Team**:
 A group of `User`s created by an `Admin`. The `Team` is the visibility boundary
-for Links assigned to it: every `Team Member` sees all of the `Team`'s Links
-and their related data. Membership is many-to-many; a `User` may belong to
-several Teams.
+for Links assigned to it: every `Team Member` sees all of the `Team`'s `Team
+Link`s and their related data. Membership is many-to-many; a `User` may belong
+to several Teams.
 _Avoid_: group, workspace, organization
+
+**Team Link**:
+A `Link` that belongs to a `Team`, visible to every `Team Member` (read-only)
+and managed by its `Creator` or a `Team Owner`. The counterpart of a `Personal
+Link`.
+_Avoid_: shared link, team's link
 
 **Team Owner**:
 A `Team Member` with the privilege to manage the `Team`'s membership: add and
@@ -113,10 +120,16 @@ implicit Team Owner role.
 _Avoid_: owner (alone), team admin, admin
 
 **Team Member**:
-A `User` who belongs to a `Team`. Sees the `Team`'s Links and their related
-data (read-only) and manages only their own Links. Distinct from `Creator`,
-which is a per-Link role.
+A `User` who belongs to a `Team`. Sees the `Team`'s `Team Link`s and their
+related data (read-only) and manages only their own Links. Distinct from
+`Creator`, which is a per-Link role.
 _Avoid_: member (alone), contributor
+
+**Invite Code**:
+The secret a `Team Owner` generates for a `Team` that lets a `User` join it as
+a `Team Member`. The joining `User` enters it on the Teams page; an `Admin`
+adds members directly by username instead.
+_Avoid_: join code, invite link, invitation token
 
 **Password**:
 The secret a `User` signs in with. Stored only as a bcrypt hash; the first-run

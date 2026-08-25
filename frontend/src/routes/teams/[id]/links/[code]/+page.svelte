@@ -8,7 +8,9 @@
 		BreakdownResponse,
 		Dimension,
 		Link,
-		TimeseriesRow
+		TeamDetail,
+		TimeseriesRow,
+		User
 	} from '$lib/types';
 	import { DIMENSIONS } from '$lib/types';
 	import VisitsChart from '$lib/components/VisitsChart.svelte';
@@ -34,12 +36,15 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Power, PowerOff, Save, Trash2, TriangleAlert } from '@lucide/svelte';
 
-	let link = $state<Link | null>(null);
-	let loading = $state(true);
-	let error = $state('');
-
+	const teamId = $derived(Number(page.params.id));
 	const hostname = $derived(page.url.searchParams.get('hostname') ?? '');
 	const code = $derived(page.params.code as string);
+
+	let link = $state<Link | null>(null);
+	let team = $state<TeamDetail | null>(null);
+	let me = $state<User | null>(null);
+	let loading = $state(true);
+	let error = $state('');
 
 	let editDestination = $state('');
 	let editRemark = $state('');
@@ -54,15 +59,23 @@
 	let analyticsLoading = $state(true);
 	let analyticsError = $state('');
 
-	onMount(load);
+	// A Team Link is managed by its Creator or a Team Owner; other members read.
+	const canManage = $derived(
+		!!link && (link.created_by === me?.id || team?.members.find((m) => m.id === me?.id)?.role === 'owner')
+	);
 
-	async function load() {
-		loading = true;
-		error = '';
+	onMount(async () => {
 		try {
-			link = await api.getLink(code, hostname);
-			editDestination = link.destination;
-			editRemark = link.remark ?? '';
+			const [l, t, u] = await Promise.all([
+				api.getLink(code, hostname),
+				api.getTeam(teamId),
+				api.me()
+			]);
+			link = l;
+			team = t;
+			me = u;
+			editDestination = l.destination;
+			editRemark = l.remark ?? '';
 		} catch (e) {
 			error = (e as Error).message;
 			loading = false;
@@ -70,7 +83,7 @@
 		}
 		loading = false;
 		await loadAnalytics();
-	}
+	});
 
 	async function loadAnalytics() {
 		analyticsLoading = true;
@@ -95,7 +108,7 @@
 		await loadAnalytics();
 	}
 
-	async function saveDestination() {
+	async function saveLink() {
 		saving = true;
 		saveError = '';
 		saved = false;
@@ -123,7 +136,7 @@
 		if (!window.confirm(`Delete ${hostname}/${code}? This cannot be undone.`)) return;
 		try {
 			await api.deleteLink(code, hostname);
-			await goto(`/?hostname=${encodeURIComponent(hostname)}`);
+			await goto(`/teams/${teamId}`);
 		} catch (e) {
 			error = (e as Error).message;
 		}
@@ -141,9 +154,13 @@
 		<AlertTitle>Failed to load Link</AlertTitle>
 		<AlertDescription>{error}</AlertDescription>
 	</Alert>
-{:else if link}
+{:else if link && team}
 	<div class="flex flex-wrap items-center gap-3">
 		<h1 class="text-2xl font-semibold tracking-tight">
+			<a href={`/teams/${teamId}`} class="text-muted-foreground hover:text-foreground hover:underline">
+				{team.name}
+			</a>
+			<span class="text-muted-foreground">/</span>
 			{hostname}/{code}
 		</h1>
 		{#if link.disabled}
@@ -154,11 +171,10 @@
 	</div>
 	<p class="mt-1 text-sm text-muted-foreground">
 		Created {link.created_at.slice(0, 10)} · Updated {link.updated_at.slice(0, 10)}
+		{#if !canManage}
+			· Read-only — managed by its Creator or a Team Owner
+		{/if}
 	</p>
-
-	{#if link.remark}
-		<p class="mt-2 text-sm text-foreground/90">{link.remark}</p>
-	{/if}
 
 	<div class="mt-6 grid gap-6 lg:grid-cols-2">
 		<div class="space-y-6">
@@ -177,50 +193,67 @@
 					<form
 						onsubmit={(e) => {
 							e.preventDefault();
-							saveDestination();
+							saveLink();
 						}}
 						class="space-y-3"
 					>
-						<Label for="destination">Destination URL</Label>
-						<div class="flex gap-2">
-							<Input id="destination" bind:value={editDestination} class="flex-1" required />
-							<Button type="submit" disabled={saving}>
-								<Save class="size-4" /> {saving ? 'Saving…' : 'Save'}
-							</Button>
+						<div class="space-y-2">
+							<Label for="destination">Destination URL</Label>
+							<div class="flex gap-2">
+								<Input
+									id="destination"
+									bind:value={editDestination}
+									class="flex-1"
+									required
+									disabled={!canManage}
+								/>
+								{#if canManage}
+									<Button type="submit" disabled={saving}>
+										<Save class="size-4" /> {saving ? 'Saving…' : 'Save'}
+									</Button>
+								{/if}
+							</div>
 						</div>
 						<div class="space-y-2">
 							<Label for="remark">Remark (optional)</Label>
-							<Input id="remark" bind:value={editRemark} placeholder="What this Link is for" />
+							<Input
+								id="remark"
+								bind:value={editRemark}
+								placeholder="What this Link is for"
+								disabled={!canManage}
+							/>
 						</div>
 						{#if saved}
-							<p class="text-sm text-green-600">Destination saved.</p>
+							<p class="text-sm text-green-600">Link saved.</p>
 						{/if}
 					</form>
 				</CardContent>
 			</Card>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Status</CardTitle>
-					<CardDescription>
-						{link.disabled
-							? 'This Link returns 404 from the redirector.'
-							: 'This Link redirects visitors to its Destination.'}
-					</CardDescription>
-				</CardHeader>
-				<CardContent class="flex flex-wrap gap-2">
-					<Button variant={link.disabled ? 'default' : 'secondary'} onclick={toggleDisabled}>
-						{#if link.disabled}
-							<Power class="size-4" /> Enable
-						{:else}
-							<PowerOff class="size-4" /> Disable
-						{/if}
-					</Button>
-					<Button variant="destructive" onclick={remove}>
-						<Trash2 class="size-4" /> Delete
-					</Button>
-				</CardContent>
-			</Card>
+			{#if canManage}
+				<Card>
+					<CardHeader>
+						<CardTitle>Status</CardTitle>
+						<CardDescription>
+							{link.disabled
+								? 'This Link returns 404 from the redirector.'
+								: 'This Link redirects visitors to its Destination.'}
+						</CardDescription>
+					</CardHeader>
+					<CardContent class="flex flex-wrap gap-2">
+						<Button variant={link.disabled ? 'default' : 'secondary'} onclick={toggleDisabled}>
+							{#if link.disabled}
+								<Power class="size-4" /> Enable
+							{:else}
+								<PowerOff class="size-4" /> Disable
+							{/if}
+						</Button>
+						<Button variant="destructive" onclick={remove}>
+							<Trash2 class="size-4" /> Delete
+						</Button>
+					</CardContent>
+				</Card>
+			{/if}
 		</div>
 
 		<div class="space-y-6">

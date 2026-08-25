@@ -107,3 +107,13 @@ func (s *LinkStore) Delete(ctx context.Context, hostname, code string) error {
 		Where("hostname = ? AND code = ?", hostname, code).
 		Delete(&domain.Link{}).Error
 }
+
+// ListPersonalByCreator returns every Personal Link a user created, across all
+// hostnames. Used to evict a deleted user's links from the redirect cache.
+func (s *LinkStore) ListPersonalByCreator(ctx context.Context, creatorID int64) ([]domain.Link, error) {
+	var links []domain.Link
+	err := s.db.WithContext(ctx).
+		Where("created_by = ? AND team_id IS NULL", creatorID).
+		Find(&links).Error
+	return links, err
+}

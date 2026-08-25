@@ -38,6 +38,7 @@ func testDB(t *testing.T) *gorm.DB {
 		store.NewHostnameStore(db).Migrate,
 		store.NewUserStore(db).Migrate,
 		store.NewTeamStore(db).Migrate,
+		store.NewInviteStore(db).Migrate,
 		store.NewAnalyticsStore(db).Migrate,
 	} {
 		if err := migrate(ctx); err != nil {
@@ -64,6 +65,7 @@ func newTestServer(t *testing.T) *server {
 		users:     store.NewUserStore(db),
 		hostnames: hs,
 		teams:     store.NewTeamStore(db),
+		invites:   store.NewInviteStore(db),
 		linkCache: cache.NewLinkCache(client),
 		cfg:       config{defaultHostname: "localhost", retentionDays: 30},
 	}
@@ -284,7 +286,8 @@ func TestTeamMembershipPowers(t *testing.T) {
 	}
 
 	// admin is no longer implicitly an owner: promote bob and demote admin to
-	// member; admin then has no owner power despite being admin
+	// member. Admin loses owner powers but keeps admin privilege: direct
+	// member add is admin-only, not owner-only (ADR 0010).
 	do(t, s, "POST", "/teams/1/members", adminTok, map[string]any{"username": "bob"})
 	if rec := do(t, s, "PATCH", "/teams/1/members/"+strconv.FormatInt(bobID, 10), adminTok, map[string]any{"role": "owner"}); rec.Code != 200 {
 		t.Fatalf("promote bob = %d", rec.Code)
@@ -292,8 +295,17 @@ func TestTeamMembershipPowers(t *testing.T) {
 	if rec := do(t, s, "PATCH", "/teams/1/members/"+strconv.FormatInt(adminID, 10), adminTok, map[string]any{"role": "member"}); rec.Code != 200 {
 		t.Fatalf("demote admin = %d", rec.Code)
 	}
-	if rec := do(t, s, "POST", "/teams/1/members", adminTok, map[string]any{"username": "nobody"}); rec.Code != http.StatusForbidden {
-		t.Fatalf("admin-not-owner add member = %d, want 403", rec.Code)
+	// a demoted admin can still add members directly...
+	newUser(t, s, "dave", false)
+	if rec := do(t, s, "POST", "/teams/1/members", adminTok, map[string]any{"username": "dave"}); rec.Code != http.StatusCreated {
+		t.Fatalf("demoted admin add member = %d, want 201", rec.Code)
+	}
+	if rec := do(t, s, "POST", "/teams/1/members", adminTok, map[string]any{"username": "ghost"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("admin add unknown user = %d, want 404", rec.Code)
+	}
+	// ...but cannot promote/demote without the owner role
+	if rec := do(t, s, "PATCH", "/teams/1/members/"+strconv.FormatInt(adminID, 10), adminTok, map[string]any{"role": "owner"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("admin-not-owner promote = %d, want 403", rec.Code)
 	}
 	// admin can still read the team as instance oversight
 	if rec := do(t, s, "GET", "/teams/1", adminTok, nil); rec.Code != 200 {

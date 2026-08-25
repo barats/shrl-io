@@ -2,10 +2,50 @@ export interface Link {
 	hostname: string;
 	code: string;
 	destination: string;
+	remark: string;
 	disabled: boolean;
 	created_by: number;
+	team_id: number | null;
 	created_at: string;
 	updated_at: string;
+}
+
+export type TeamRole = 'owner' | 'member';
+
+// Team as returned by GET /teams: role is the caller's role, empty for an
+// admin viewing a team they do not belong to.
+export interface Team {
+	id: number;
+	name: string;
+	created_by: number;
+	created_at: string;
+	role: TeamRole | '';
+}
+
+export interface TeamMember {
+	id: number;
+	username: string;
+	role: TeamRole;
+	joined_at: string;
+}
+
+// Team detail as returned by GET /teams/{id}: adds the member list.
+export interface TeamDetail {
+	id: number;
+	name: string;
+	created_by: number;
+	created_at: string;
+	members: TeamMember[];
+}
+
+export interface InviteCode {
+	id: number;
+	team_id: number;
+	code: string;
+	created_by: number;
+	created_at: string;
+	used_by: number | null;
+	used_at: string | null;
 }
 
 export interface User {

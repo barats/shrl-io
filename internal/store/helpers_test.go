@@ -29,6 +29,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 		NewHostnameStore(db).Migrate,
 		NewUserStore(db).Migrate,
 		NewTeamStore(db).Migrate,
+		NewInviteStore(db).Migrate,
 		NewAnalyticsStore(db).Migrate,
 	} {
 		if err := migrate(ctx); err != nil {

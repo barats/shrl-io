@@ -93,3 +93,21 @@ func (s *UserStore) AssignLinksToCreator(ctx context.Context, userID int64) erro
 		Where("created_by IS NULL OR created_by = 0").
 		Update("created_by", userID).Error
 }
+
+// Delete removes a user and everything owned by them: bearer tokens,
+// memberships, and Personal Links. Team Links they created stay with the Team
+// (the fixed-team rule), leaving created_by as a dangling id.
+func (s *UserStore) Delete(ctx context.Context, id int64) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", id).Delete(&domain.Token{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", id).Delete(&domain.TeamMember{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("created_by = ? AND team_id IS NULL", id).Delete(&domain.Link{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&domain.User{}, id).Error
+	})
+}

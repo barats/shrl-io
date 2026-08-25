@@ -195,13 +195,15 @@ func (s *server) createTeamLink(w http.ResponseWriter, r *http.Request) {
 	s.createLinkInScope(w, r, &t.ID, currentUser(r).ID)
 }
 
-// addTeamMember adds an existing user to the team as a member.
+// addTeamMember adds an existing user to the team as a member. Direct add is
+// admin-only (ADR 0010): Team Owners invite members via single-use codes
+// instead, because only an Admin can see every account.
 func (s *server) addTeamMember(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.teamByID(w, r)
 	if !ok {
 		return
 	}
-	if !s.requireTeamOwner(w, r, t.ID) {
+	if !s.requireAdmin(w, r) {
 		return
 	}
 	var req struct {

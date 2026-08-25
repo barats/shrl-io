@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/barats/shrl-io/internal/domain"
@@ -79,4 +80,61 @@ func (s *server) createUser(w http.ResponseWriter, r *http.Request) {
 		"user":     u,
 		"password": password, // shown once to the creating admin
 	})
+}
+
+// deleteUser removes a user (admin only). Their Personal Links, bearer
+// tokens, and memberships are removed; Team Links they created stay with the
+// Team (the fixed-team rule), leaving created_by as a dangling id. A user who
+// is the sole owner of a team cannot be deleted (the last-owner rule).
+func (s *server) deleteUser(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	if _, err := s.users.GetByID(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	// last-owner rule: a user who is the only owner of any team cannot go
+	teams, err := s.teams.ListForUser(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list teams")
+		return
+	}
+	for _, t := range teams {
+		role, err := s.teams.MemberRole(r.Context(), t.ID, id)
+		if err == nil && role == domain.RoleOwner {
+			n, err := s.teams.CountOwners(r.Context(), t.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to count owners")
+				return
+			}
+			if n <= 1 {
+				writeError(w, http.StatusConflict, "cannot delete: user is the only owner of team "+t.Name)
+				return
+			}
+		}
+	}
+	// evict the user's personal links from the redirect cache
+	links, err := s.links.ListPersonalByCreator(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list links")
+		return
+	}
+	if err := s.users.Delete(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete user")
+		return
+	}
+	for _, l := range links {
+		s.linkCache.Delete(r.Context(), l.Hostname, l.Code)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

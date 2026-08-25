@@ -9,7 +9,7 @@
    SELF-HOSTED URL SHORTENER & TRAFFIC ANALYZER
 ```
 
-> **Status: MVP** — self-hosted redirects, privacy-first analytics, and a multi-user admin UI today. QR codes, rate limiting, teams, and UTM are planned (see [Roadmap](#roadmap)).
+> **Status: MVP** — self-hosted redirects, privacy-first analytics, a multi-user admin UI, and Teams today. QR codes, rate limiting, and UTM are planned (see [Roadmap](#roadmap)).
 
 ---
 
@@ -83,6 +83,27 @@ teams and individuals who want full control over their link data.
 - **Analytics view**: lifetime and window totals, a daily visits chart, and
   top-N breakdowns with a dimension picker.
 
+### Teams
+
+- **Shared ownership**: an **Admin** creates Teams and becomes their first
+  **Team Owner**. A Link belongs to exactly one Team or is **Personal**; a
+  Team's Links are visible to every **Team Member** (read-only) and managed by
+  their **Creator** or a **Team Owner**.
+- **Invite-code membership**: Team Owners generate single-use, revocable
+  **Invite Codes** and share them out of band; a User joins a Team by entering
+  the code. Only an Admin adds members directly (by username).
+- **Team dashboard**: each Team page lists members, invite codes (for owners),
+  and the Team's Links with a hostname filter; Team Links have their own detail
+  page with analytics.
+
+### Settings (admin)
+
+- **Hostnames**: register and remove Hostnames in the Registry.
+- **Accounts**: create and delete Users; deleting a User removes their
+  Personal Links and memberships — Team Links they created stay with the Team.
+- **Teams**: create and delete Teams; deleting a Team reverts its Links to
+  Personal.
+
 ### Security
 
 - **Open-redirect protection**: only `http`/`https` Destinations are accepted;
@@ -143,8 +164,6 @@ teams and individuals who want full control over their link data.
 
 Planned, not yet built:
 
-- **Teams**: shared Links across Users with fine-grained permissions (basic
-  admin/user roles ship today)
 - **Geographic maps**: country/region map views in the admin analytics screen
   (the base dashboard UI now ships with charts)
 - **QR code generation** for every Link, with download
@@ -245,6 +264,7 @@ Team they belong to.
 | GET    | `/me`                                  | The authenticated user                              |
 | GET    | `/users`                               | List users (admin only)                             |
 | POST   | `/users`                               | Create a user (admin only); password returned once  |
+| DELETE | `/users/{id}`                          | Delete a user (admin only): removes Personal Links and memberships; Team Links stay with the Team |
 | POST   | `/links`                               | Create a Link (Code auto-generated; Remark optional) |
 | GET    | `/links`                               | List the current user's Links for a Hostname        |
 | GET    | `/hostnames`                           | List registered Hostnames (the registry)            |
@@ -263,9 +283,13 @@ Team they belong to.
 | GET    | `/teams/{id}`                          | Team details and members (members and admins)       |
 | GET    | `/teams/{id}/links`                    | The Team's Links, read-only for members             |
 | POST   | `/teams/{id}/links`                    | Create a Link in the Team (members)                 |
-| POST   | `/teams/{id}/members`                  | Add an existing user as a member (Team Owner)       |
+| POST   | `/teams/{id}/members`                  | Add an existing user as a member (admin only)       |
 | PATCH  | `/teams/{id}/members/{userID}`         | Promote or demote a member (Team Owner)             |
 | DELETE | `/teams/{id}/members/{userID}`         | Remove a member (Team Owner); a member may remove themself |
+| POST   | `/teams/{id}/invites`                  | Generate a single-use Invite Code (Team Owner)      |
+| GET    | `/teams/{id}/invites`                  | List outstanding Invite Codes (Team Owner)          |
+| DELETE | `/teams/{id}/invites/{code}`           | Revoke an outstanding Invite Code (Team Owner)      |
+| POST   | `/teams/join`                          | Join a Team by entering an Invite Code              |
 | DELETE | `/teams/{id}`                          | Delete a Team (admin only); its Links revert to Personal |
 
 A Link is a JSON object: `hostname`, `code`, `destination`, `remark`,
@@ -276,6 +300,8 @@ Teams are the ownership boundary for Links: a Link belongs to exactly one Team
 or is Personal (no Team), and a Link's Team is fixed — it never moves. Team
 Members see all of the Team's Links and their analytics read-only; a Link is
 managed by its Creator (while a member of the Team) or by a Team Owner.
+Membership runs on Invite Codes: a Team Owner generates single-use codes and a
+User joins by entering one; only an Admin adds members directly by username.
 Joining or leaving a Team never moves existing Personal Links.
 
 Query parameters:
@@ -292,9 +318,9 @@ Query parameters:
 
 This project uses a precise domain vocabulary (Link, Code, Hostname,
 Destination, Remark, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete,
-User, Admin, Creator, Personal Link, Team, Team Owner, Team Member, Token,
-Password). See [`CONTEXT.md`](CONTEXT.md) for definitions and the words to
-avoid.
+User, Admin, Creator, Personal Link, Team, Team Link, Team Owner, Team Member,
+Invite Code, Token, Password). See [`CONTEXT.md`](CONTEXT.md) for definitions
+and the words to avoid.
 
 ## Documentation
 

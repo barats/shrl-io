@@ -1,4 +1,15 @@
-import type { AnalyticsResponse, BreakdownResponse, Link, TimeseriesRow, User } from './types';
+import type {
+	AnalyticsResponse,
+	BreakdownResponse,
+	InviteCode,
+	Link,
+	Team,
+	TeamDetail,
+	TeamMember,
+	TeamRole,
+	TimeseriesRow,
+	User
+} from './types';
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`/api/${path}`, init);
@@ -22,8 +33,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface CreateLinkInput {
 	hostname?: string;
-	code?: string;
 	destination: string;
+	remark?: string;
 }
 
 export const api = {
@@ -33,6 +44,18 @@ export const api = {
 
 	async hostnames(): Promise<string[]> {
 		return req<string[]>('hostnames');
+	},
+
+	async createHostname(name: string): Promise<unknown> {
+		return req('hostnames', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ hostname: name })
+		});
+	},
+
+	async deleteHostname(name: string): Promise<void> {
+		return req(`hostnames/${encodeURIComponent(name)}`, { method: 'DELETE' });
 	},
 
 	async listLinks(hostname?: string): Promise<Link[]> {
@@ -49,18 +72,16 @@ export const api = {
 	},
 
 	async getLink(code: string, hostname: string): Promise<Link> {
-		return req<Link>(
-			`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`
-		);
+		return req<Link>(`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`);
 	},
 
-	async updateLink(code: string, hostname: string, destination: string): Promise<Link> {
+	async updateLink(code: string, hostname: string, destination: string, remark = ''): Promise<Link> {
 		return req<Link>(
 			`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`,
 			{
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ destination })
+				body: JSON.stringify({ destination, remark })
 			}
 		);
 	},
@@ -74,10 +95,9 @@ export const api = {
 	},
 
 	async deleteLink(code: string, hostname: string): Promise<void> {
-		return req<void>(
-			`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`,
-			{ method: 'DELETE' }
-		);
+		return req<void>(`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`, {
+			method: 'DELETE'
+		});
 	},
 
 	async getAnalytics(code: string, hostname: string): Promise<AnalyticsResponse> {
@@ -94,9 +114,7 @@ export const api = {
 		const q = new URLSearchParams({ hostname });
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
-		return req<TimeseriesRow[]>(
-			`links/${encodeURIComponent(code)}/analytics/timeseries?${q}`
-		);
+		return req<TimeseriesRow[]>(`links/${encodeURIComponent(code)}/analytics/timeseries?${q}`);
 	},
 
 	async getBreakdowns(
@@ -109,9 +127,7 @@ export const api = {
 		const q = new URLSearchParams({ hostname, dimension });
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
-		return req<BreakdownResponse>(
-			`links/${encodeURIComponent(code)}/analytics/breakdowns?${q}`
-		);
+		return req<BreakdownResponse>(`links/${encodeURIComponent(code)}/analytics/breakdowns?${q}`);
 	},
 
 	async login(username: string, password: string): Promise<void> {
@@ -144,6 +160,90 @@ export const api = {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(input)
+		});
+	},
+
+	async deleteUser(id: number): Promise<void> {
+		return req<void>(`users/${id}`, { method: 'DELETE' });
+	},
+
+	// --- Teams ---
+
+	async listTeams(): Promise<Team[]> {
+		return req<Team[]>('teams');
+	},
+
+	async createTeam(name: string): Promise<Team> {
+		return req<Team>('teams', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ name })
+		});
+	},
+
+	async getTeam(id: number): Promise<TeamDetail> {
+		return req<TeamDetail>(`teams/${id}`);
+	},
+
+	async listTeamLinks(id: number, hostname?: string): Promise<Link[]> {
+		const q = hostname ? `?hostname=${encodeURIComponent(hostname)}` : '';
+		return req<Link[]>(`teams/${id}/links${q}`);
+	},
+
+	async createTeamLink(
+		id: number,
+		input: CreateLinkInput
+	): Promise<Link> {
+		return req<Link>(`teams/${id}/links`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(input)
+		});
+	},
+
+	async addTeamMember(id: number, username: string): Promise<TeamMember> {
+		return req<TeamMember>(`teams/${id}/members`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ username })
+		});
+	},
+
+	async setTeamMemberRole(id: number, userId: number, role: TeamRole): Promise<TeamMember> {
+		return req<TeamMember>(`teams/${id}/members/${userId}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ role })
+		});
+	},
+
+	async removeTeamMember(id: number, userId: number): Promise<void> {
+		return req<void>(`teams/${id}/members/${userId}`, { method: 'DELETE' });
+	},
+
+	async deleteTeam(id: number): Promise<void> {
+		return req<void>(`teams/${id}`, { method: 'DELETE' });
+	},
+
+	// --- Invite codes ---
+
+	async createInvite(id: number): Promise<InviteCode> {
+		return req<InviteCode>(`teams/${id}/invites`, { method: 'POST' });
+	},
+
+	async listInvites(id: number): Promise<InviteCode[]> {
+		return req<InviteCode[]>(`teams/${id}/invites`);
+	},
+
+	async revokeInvite(id: number, code: string): Promise<void> {
+		return req<void>(`teams/${id}/invites/${encodeURIComponent(code)}`, { method: 'DELETE' });
+	},
+
+	async joinTeam(code: string): Promise<Team> {
+		return req<Team>('teams/join', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ code })
 		});
 	}
 };

@@ -40,7 +40,7 @@
 
 	let createHostname = $state('');
 	let createDestination = $state('');
-	let createCode = $state('');
+	let createRemark = $state('');
 	let creating = $state(false);
 	let createError = $state('');
 
@@ -86,11 +86,11 @@
 			await api.createLink({
 				hostname: createHostname || undefined,
 				destination: createDestination,
-				code: createCode || undefined
+				remark: createRemark || undefined
 			});
 			const createdHost = createHostname;
 			createDestination = '';
-			createCode = '';
+			createRemark = '';
 			if (!hostnames.includes(createdHost)) {
 				hostnames = [...hostnames, createdHost].sort();
 			}
@@ -212,7 +212,16 @@
 				>
 					<div class="space-y-2">
 						<Label for="new-hostname">Hostname</Label>
-						<Input id="new-hostname" bind:value={createHostname} placeholder="localhost" />
+						<Select type="single" bind:value={createHostname}>
+							<SelectTrigger id="new-hostname" class="w-full">
+								<span data-slot="select-value">{createHostname || 'Hostname'}</span>
+							</SelectTrigger>
+							<SelectContent>
+								{#each hostnames as host (host)}
+									<SelectItem value={host} label={host} />
+								{/each}
+							</SelectContent>
+						</Select>
 					</div>
 					<div class="space-y-2">
 						<Label for="new-destination">Destination</Label>
@@ -224,11 +233,11 @@
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="new-code">Code (optional)</Label>
+						<Label for="new-remark">Remark (optional)</Label>
 						<Input
-							id="new-code"
-							bind:value={createCode}
-							placeholder="auto-generated if blank"
+							id="new-remark"
+							bind:value={createRemark}
+							placeholder="What this Link is for"
 						/>
 					</div>
 					<Button type="submit" class="w-full" disabled={creating}>

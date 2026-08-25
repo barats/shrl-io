@@ -31,8 +31,9 @@
 				</a>
 				<nav class="flex items-center gap-4">
 					<a href="/" class="text-sm text-muted-foreground hover:text-foreground">Links</a>
+					<a href="/teams" class="text-sm text-muted-foreground hover:text-foreground">Teams</a>
 					{#if data?.user?.isAdmin}
-						<a href="/users" class="text-sm text-muted-foreground hover:text-foreground">Users</a>
+						<a href="/settings" class="text-sm text-muted-foreground hover:text-foreground">Settings</a>
 					{/if}
 				</nav>
 			</div>

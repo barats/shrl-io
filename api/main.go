@@ -49,6 +49,7 @@ type server struct {
 	users     *store.UserStore
 	hostnames *store.HostnameStore
 	teams     *store.TeamStore
+	invites   *store.InviteStore
 	linkCache *cache.LinkCache
 	cfg       config
 }
@@ -63,6 +64,7 @@ func main() {
 	users := store.NewUserStore(db)
 	hostnames := store.NewHostnameStore(db)
 	teams := store.NewTeamStore(db)
+	invites := store.NewInviteStore(db)
 	if err := links.Migrate(ctx); err != nil {
 		log.Fatalf("migrate links: %v", err)
 	}
@@ -78,12 +80,15 @@ func main() {
 	if err := teams.Migrate(ctx); err != nil {
 		log.Fatalf("migrate teams: %v", err)
 	}
+	if err := invites.Migrate(ctx); err != nil {
+		log.Fatalf("migrate invites: %v", err)
+	}
 	bootstrapAdmin(ctx, users, cfg)
 	bootstrapHostnames(ctx, hostnames, cfg)
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, linkCache: linkCache, cfg: cfg}
+	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, invites: invites, linkCache: linkCache, cfg: cfg}
 
 	go func() {
 		warm(ctx, links, linkCache)
@@ -128,7 +133,12 @@ func (s *server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /teams/{id}/members", s.addTeamMember)
 	mux.HandleFunc("PATCH /teams/{id}/members/{userID}", s.setTeamMemberRole)
 	mux.HandleFunc("DELETE /teams/{id}/members/{userID}", s.removeTeamMember)
+	mux.HandleFunc("POST /teams/{id}/invites", s.createInvite)
+	mux.HandleFunc("GET /teams/{id}/invites", s.listInvites)
+	mux.HandleFunc("DELETE /teams/{id}/invites/{code}", s.revokeInvite)
+	mux.HandleFunc("POST /teams/join", s.joinTeam)
 	mux.HandleFunc("DELETE /teams/{id}", s.deleteTeam)
+	mux.HandleFunc("DELETE /users/{id}", s.deleteUser)
 	return mux
 }
 
