@@ -11,7 +11,11 @@
 
 > **Status: MVP** — self-hosted redirects, privacy-first analytics, a multi-user admin UI, and Teams today. QR codes, rate limiting, and UTM are planned (see [Roadmap](#roadmap)).
 
+<div align="center">
+
 [![CI](https://github.com/barats/shrl-io/actions/workflows/ci.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/ci.yml)
+
+</div>
 
 ---
 
