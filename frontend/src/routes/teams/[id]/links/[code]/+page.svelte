@@ -14,6 +14,7 @@
 	} from '$lib/types';
 	import { DIMENSIONS } from '$lib/types';
 	import VisitsChart from '$lib/components/VisitsChart.svelte';
+	import LinkQR from '$lib/components/LinkQR.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -254,6 +255,8 @@
 					</CardContent>
 				</Card>
 			{/if}
+
+			<LinkQR {hostname} {code} />
 		</div>
 
 		<div class="space-y-6">

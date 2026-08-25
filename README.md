@@ -48,6 +48,9 @@ teams and individuals who want full control over their link data.
   select from the registry when creating a Link. A Code is unique per Hostname.
 - **Remark**: an optional note on a Link so you can remember what it does;
   editable after creation.
+- **QR codes**: every Link's detail page shows a QR code for its short URL,
+  generated entirely in the browser and downloadable as a 1024px PNG — no
+  server round-trip.
 - **Full lifecycle**: create, list, get, update the Destination, disable,
   enable, or delete a Link.
 - **Disabled** Links return 404 from the redirector (reversible — the Link and
@@ -175,7 +178,6 @@ Planned, not yet built:
 
 - **Geographic maps**: country/region map views in the admin analytics screen
   (the base dashboard UI now ships with charts)
-- **QR code generation** for every Link, with download
 - **Rate limiting** on the API and redirector
 - **UTM campaign tracking**
 
