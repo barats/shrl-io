@@ -11,6 +11,8 @@ import (
 var validDimensions = map[string]bool{
 	"referrer": true, "device": true, "os": true, "browser": true,
 	"country": true, "region": true, "city": true,
+	"utm_source": true, "utm_medium": true, "utm_campaign": true,
+	"utm_term": true, "utm_content": true, "utm_id": true,
 }
 
 // analyticsWindow returns the from/to date range for analytics reads,
@@ -88,7 +90,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		dimension = "referrer"
 	}
 	if !validDimensions[dimension] {
-		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, browser, country, region, or city")
+		writeError(w, http.StatusBadRequest, "dimension must be referrer, device, os, browser, country, region, city, or a utm_* parameter")
 		return
 	}
 	if _, ok := s.accessibleLink(w, r, code); !ok {

@@ -46,6 +46,15 @@ Shown on the list and detail pages; editable after creation; never part of
 the short URL or the redirect.
 _Avoid_: note, description, memo, comment
 
+**Forward UTM**:
+A per-`Link` setting (default off) controlling whether the six recognized
+`UTM Parameter`s on a `Visitor`'s short URL are appended to the `Destination`
+on `Redirect`. When on, an incoming value overrides a same-named parameter on
+the `Destination`, the `Destination`'s other query parameters are preserved,
+and empty values are skipped; when off, the short URL's query string is dropped
+as usual. Either way the `UTM Parameter`s are recorded in analytics.
+_Avoid_: UTM passthrough, append UTM
+
 **Redirect**:
 The operation of sending a visitor from a `Link`'s short URL to its `Destination`.
 _Avoid_: forward, bounce
@@ -79,6 +88,21 @@ The geographic attribution of a `Visitor` — `country`, `region`, and `city`,
 derived from the visitor's IP at aggregation time. The IP itself is never
 stored; only the `Location` and aggregate counts are persisted.
 _Avoid_: geo, IP address
+
+**UTM Parameter**:
+One of six query parameters a `Visitor` may carry on a short URL —
+`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, and
+`utm_id` — recording marketing attribution on a `Visit`. Recognized on every
+`Redirect`, recorded as analytics `Breakdown` dimensions, and (optionally)
+forwarded to the `Destination` per `Forward UTM`. Absent or empty values bucket
+as `unknown`. A property of the `Visit`, not of the `Link`.
+_Avoid_: UTM tag, tracking parameter
+
+**Campaign**:
+The value of the `utm_campaign` `UTM Parameter` on a `Visit` — a marketing
+attribution label. A `Breakdown` dimension value, never a first-class entity:
+a `Campaign` does not group `Link`s or own aggregates.
+_Avoid_: campaign (as a grouping entity)
 
 **User**:
 A person with an account who signs in and manages Links. Every Link has a

@@ -13,6 +13,7 @@
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import {
@@ -41,6 +42,7 @@
 	let createHostname = $state('');
 	let createDestination = $state('');
 	let createRemark = $state('');
+	let createForwardUTM = $state(false);
 	let creating = $state(false);
 	let createError = $state('');
 
@@ -86,11 +88,13 @@
 			await api.createLink({
 				hostname: createHostname || undefined,
 				destination: createDestination,
-				remark: createRemark || undefined
+				remark: createRemark || undefined,
+				forward_utm: createForwardUTM
 			});
 			const createdHost = createHostname;
 			createDestination = '';
 			createRemark = '';
+			createForwardUTM = false;
 			if (!hostnames.includes(createdHost)) {
 				hostnames = [...hostnames, createdHost].sort();
 			}
@@ -239,6 +243,15 @@
 							bind:value={createRemark}
 							placeholder="What this Link is for"
 						/>
+					</div>
+					<div class="flex items-start gap-2">
+						<Checkbox id="new-forward-utm" bind:checked={createForwardUTM} class="mt-0.5" />
+						<Label
+							for="new-forward-utm"
+							class="font-normal leading-snug text-muted-foreground"
+						>
+							Forward UTM parameters from the short URL to the Destination
+						</Label>
 					</div>
 					<Button type="submit" class="w-full" disabled={creating}>
 						{#if creating}

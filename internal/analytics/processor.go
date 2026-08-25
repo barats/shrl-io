@@ -131,6 +131,14 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 			b.Count++
 			breakdowns[bk] = b
 		}
+		for _, dim := range UTMParams {
+			val := NormalizeUTMValue(strVal(m.Values, dim))
+			bk := breakdownKey{day: day, hostname: hostname, code: code, dimension: dim, value: val}
+			b := breakdowns[bk]
+			b.Hostname, b.Code, b.Day, b.Dimension, b.Value = hostname, code, day, dim, val
+			b.Count++
+			breakdowns[bk] = b
+		}
 	}
 
 	if err := p.Store.ApplyAnalytics(ctx, values(dailies), values(lifetimes), values(breakdowns)); err != nil {

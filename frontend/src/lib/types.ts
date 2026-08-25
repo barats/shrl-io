@@ -4,6 +4,7 @@ export interface Link {
 	destination: string;
 	remark: string;
 	disabled: boolean;
+	forward_utm: boolean;
 	created_by: number;
 	team_id: number | null;
 	created_at: string;
@@ -98,7 +99,13 @@ export const DIMENSIONS = [
 	'browser',
 	'country',
 	'region',
-	'city'
+	'city',
+	'utm_source',
+	'utm_medium',
+	'utm_campaign',
+	'utm_term',
+	'utm_content',
+	'utm_id'
 ] as const;
 
 export type Dimension = (typeof DIMENSIONS)[number];

@@ -14,6 +14,7 @@
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import {
@@ -67,6 +68,7 @@
 
 	let createDestination = $state('');
 	let createRemark = $state('');
+	let createForwardUTM = $state(false);
 	let createHostname = $state('');
 	let creating = $state(false);
 	let createError = $state('');
@@ -221,10 +223,12 @@
 			await api.createTeamLink(teamId, {
 				hostname: createHostname,
 				destination: createDestination,
-				remark: createRemark || undefined
+				remark: createRemark || undefined,
+				forward_utm: createForwardUTM
 			});
 			createDestination = '';
 			createRemark = '';
+			createForwardUTM = false;
 			await loadLinks();
 		} catch (e) {
 			createError = (e as Error).message;
@@ -535,6 +539,15 @@
 						<div class="space-y-2">
 							<Label for="team-link-remark">Remark (optional)</Label>
 							<Input id="team-link-remark" bind:value={createRemark} placeholder="What this Link is for" />
+						</div>
+						<div class="flex items-start gap-2">
+							<Checkbox id="team-link-forward-utm" bind:checked={createForwardUTM} class="mt-0.5" />
+							<Label
+								for="team-link-forward-utm"
+								class="font-normal leading-snug text-muted-foreground"
+							>
+								Forward UTM parameters from the short URL to the Destination
+							</Label>
 						</div>
 						<Button type="submit" class="w-full" disabled={creating}>
 							{#if creating}

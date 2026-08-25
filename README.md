@@ -8,8 +8,6 @@
    https://www.shrl.io   
 ```
 
-> **Status: MVP** — self-hosted redirects, privacy-first analytics, a multi-user admin UI, and Teams today. QR codes, rate limiting, and UTM are planned (see [Roadmap](#roadmap)).
-
 <div align="center">
 
 [![CI](https://github.com/barats/shrl-io/actions/workflows/ci.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/ci.yml)
@@ -35,7 +33,8 @@ teams and individuals who want full control over their link data.
 - ⚡ **Blazing fast**: Redis-backed redirects with sub-millisecond response
   times; the database never sits on the redirect hot path.
 - 📊 **Rich analytics**: visits, unique **Visitors**, daily time series, and
-  breakdowns by referrer, device, OS, browser, country, region, and city.
+  breakdowns by referrer, device, OS, browser, country, region, city, and the
+  six UTM parameters — with optional per-link forwarding to the Destination.
 - 🏠 **Simple to self-host**: one `podman compose up` brings up the whole
   stack; no external accounts required (GeoIP attribution is optional).
 - 🖥️ **Built-in admin UI**: sign in with your account and manage Links from
@@ -186,7 +185,6 @@ Planned, not yet built:
 - **Geographic maps**: country/region map views in the admin analytics screen
   (the base dashboard UI now ships with charts)
 - **Rate limiting** on the API and redirector
-- **UTM campaign tracking**
 
 ## Development
 
@@ -235,7 +233,9 @@ The API `hostname` must be a registered Hostname (admin-managed); it defaults to
       -H "Authorization: Bearer $TOKEN"
 
 Dimensions: `referrer`, `device`, `os`, `browser`, `country`, `region`,
-`city`. Bots and link-preview unfurlers are excluded. Rollups are pruned after
+`city`, and the six `utm_*` parameters (`utm_source`, `utm_medium`,
+`utm_campaign`, `utm_term`, `utm_content`, `utm_id`). Bots and link-preview
+unfurlers are excluded. Rollups are pruned after
 `SHRL_RETENTION_DAYS` (default 365); the lifetime visit total is never pruned.
 Country/region/city attribution is optional — set `SHRL_GEOLITE_LICENSE` (a
 free MaxMind account) to enable it; without it, locations report as `unknown`.
@@ -290,13 +290,13 @@ Team they belong to.
 | DELETE | `/keys/{id}`                          | Revoke an API key                                    |
 | GET    | `/settings`                           | Instance settings (admin only)                       |
 | PATCH  | `/settings/code-length`               | Set the per-instance Code Length, 4-12 (admin only)  |
-| POST   | `/links`                               | Create a Link (Code auto-generated; Remark optional) |
+| POST   | `/links`                               | Create a Link (Code auto-generated; Remark and Forward UTM optional) |
 | GET    | `/links`                               | List the current user's Links for a Hostname        |
 | GET    | `/hostnames`                           | List registered Hostnames (the registry)            |
 | POST   | `/hostnames`                           | Register a Hostname (admin only)                    |
 | DELETE | `/hostnames/{hostname}`                | Remove a Hostname from the registry (admin only)    |
 | GET    | `/links/{code}`                        | Get a Link                                          |
-| PATCH  | `/links/{code}`                        | Update a Link's Destination and Remark              |
+| PATCH  | `/links/{code}`                        | Update a Link's Destination, Remark, and Forward UTM |
 | POST   | `/links/{code}/disable`                | Disable a Link (redirector returns 404)             |
 | POST   | `/links/{code}/enable`                 | Enable a Link                                       |
 | DELETE | `/links/{code}`                        | Delete a Link                                       |
@@ -318,8 +318,13 @@ Team they belong to.
 | DELETE | `/teams/{id}`                          | Delete a Team (admin only); its Links revert to Personal |
 
 A Link is a JSON object: `hostname`, `code`, `destination`, `remark`,
-`disabled`, `created_by`, `team_id`, `created_at`, `updated_at`. `team_id` is
-`null` for Personal Links.
+`forward_utm`, `disabled`, `created_by`, `team_id`, `created_at`, `updated_at`.
+`team_id` is `null` for Personal Links. `forward_utm` (default `false`) appends
+the six recognized `utm_*` parameters from a Visitor's short URL to the
+Destination on Redirect; a same-named parameter on the Destination is
+overridden, other Destination query parameters are preserved, and empty values
+are skipped. `forward_utm` may be omitted from a PATCH to keep its current
+value.
 
 Teams are the ownership boundary for Links: a Link belongs to exactly one Team
 or is Personal (no Team), and a Link's Team is fixed — it never moves. Team
@@ -342,7 +347,8 @@ Query parameters:
 ## Terminology
 
 This project uses a precise domain vocabulary (Link, Code, Hostname,
-Destination, Remark, Visit, Visitor, Bot, Location, Redirect, Disabled, Delete,
+Destination, Remark, Visit, Visitor, Bot, Location, UTM Parameter, Forward UTM,
+Campaign, Redirect, Disabled, Delete,
 User, Admin, Creator, Personal Link, Team, Team Link, Team Owner, Team Member,
 Invite Code, Token, Password). See [`CONTEXT.md`](CONTEXT.md) for definitions
 and the words to avoid.

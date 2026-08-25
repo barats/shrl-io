@@ -41,6 +41,7 @@ export interface CreateLinkInput {
 	hostname?: string;
 	destination: string;
 	remark?: string;
+	forward_utm?: boolean;
 }
 
 export const api = {
@@ -81,13 +82,19 @@ export const api = {
 		return req<Link>(`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`);
 	},
 
-	async updateLink(code: string, hostname: string, destination: string, remark = ''): Promise<Link> {
+	async updateLink(
+		code: string,
+		hostname: string,
+		destination: string,
+		remark = '',
+		forwardUtm = false
+	): Promise<Link> {
 		return req<Link>(
 			`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`,
 			{
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ destination, remark })
+				body: JSON.stringify({ destination, remark, forward_utm: forwardUtm })
 			}
 		);
 	},

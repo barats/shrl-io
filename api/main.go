@@ -322,6 +322,7 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		Hostname    string `json:"hostname"`
 		Destination string `json:"destination"`
 		Remark      string `json:"remark"`
+		ForwardUTM  bool   `json:"forward_utm"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -363,7 +364,7 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 			writeError(w, http.StatusInternalServerError, "code generation failed")
 			return
 		}
-		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, CreatedBy: creatorID, TeamID: teamID}
+		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, ForwardUTM: req.ForwardUTM, CreatedBy: creatorID, TeamID: teamID}
 		if err := s.links.Create(r.Context(), l); err == nil {
 			s.linkCache.Put(r.Context(), l)
 			writeJSON(w, http.StatusCreated, l)
@@ -406,6 +407,8 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Destination string `json:"destination"`
 		Remark      string `json:"remark"`
+		// Pointer so a client that omits forward_utm keeps the current value.
+		ForwardUTM *bool `json:"forward_utm"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -427,6 +430,9 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 	}
 	l.Destination = dest
 	l.Remark = remark
+	if req.ForwardUTM != nil {
+		l.ForwardUTM = *req.ForwardUTM
+	}
 	if err := s.links.Save(r.Context(), l); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update link")
 		return

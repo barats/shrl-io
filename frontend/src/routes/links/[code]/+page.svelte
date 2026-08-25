@@ -23,6 +23,7 @@
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
@@ -44,6 +45,7 @@
 
 	let editDestination = $state('');
 	let editRemark = $state('');
+	let editForwardUTM = $state(false);
 	let saving = $state(false);
 	let saveError = $state('');
 	let saved = $state(false);
@@ -64,6 +66,7 @@
 			link = await api.getLink(code, hostname);
 			editDestination = link.destination;
 			editRemark = link.remark ?? '';
+			editForwardUTM = link.forward_utm;
 		} catch (e) {
 			error = (e as Error).message;
 			loading = false;
@@ -101,7 +104,7 @@
 		saveError = '';
 		saved = false;
 		try {
-			link = await api.updateLink(code, hostname, editDestination, editRemark);
+			link = await api.updateLink(code, hostname, editDestination, editRemark, editForwardUTM);
 			saved = true;
 		} catch (e) {
 			saveError = (e as Error).message;
@@ -192,6 +195,15 @@
 						<div class="space-y-2">
 							<Label for="remark">Remark (optional)</Label>
 							<Input id="remark" bind:value={editRemark} placeholder="What this Link is for" />
+						</div>
+						<div class="flex items-start gap-2">
+							<Checkbox id="forward-utm" bind:checked={editForwardUTM} class="mt-0.5" />
+							<Label
+								for="forward-utm"
+								class="font-normal leading-snug text-muted-foreground"
+							>
+								Forward UTM parameters from the short URL to the Destination
+							</Label>
 						</div>
 						{#if saved}
 							<p class="text-sm text-green-600">Destination saved.</p>

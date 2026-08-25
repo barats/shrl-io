@@ -12,6 +12,9 @@ type Link struct {
 	Destination string    `json:"destination"`
 	Remark      string    `json:"remark"`
 	Disabled    bool      `json:"disabled"`
+	// ForwardUTM appends the six recognized UTM parameters from a visitor's
+	// short URL to the Destination on Redirect. Off by default.
+	ForwardUTM bool      `json:"forward_utm"`
 	CreatedBy   int64     `json:"created_by" gorm:"index"`
 	TeamID      *int64    `json:"team_id" gorm:"index"`
 	CreatedAt   time.Time `json:"created_at"`

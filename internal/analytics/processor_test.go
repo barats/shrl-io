@@ -148,6 +148,59 @@ func TestProcessMessages(t *testing.T) {
 // TestApplyFailureUndoesDedup verifies that when the DB apply fails, the
 // batch's dedup additions are removed so a redelivered batch counts the same
 // visitors as new again instead of permanently losing unique counts.
+func TestProcessMessagesUTMDimensions(t *testing.T) {
+	fs := &fakeStore{}
+	p := &Processor{
+		Cache: &fakeCache{},
+		Store: fs,
+		Now:   func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+	}
+	msgs := []redis.XMessage{
+		// carries utm_source and utm_campaign
+		{ID: "1-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "1.1.1.1",
+			"user_agent": chromeUA(), "referrer": "",
+			"utm_source": "newsletter", "utm_campaign": "spring-launch",
+			"ts": "2026-08-24T10:00:00Z",
+		}},
+		// no utm at all -> every dimension buckets "unknown"
+		{ID: "2-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "2.2.2.2",
+			"user_agent": chromeUA(), "referrer": "",
+			"ts": "2026-08-24T11:00:00Z",
+		}},
+	}
+	if err := p.ProcessMessages(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	byDim := map[string]map[string]int64{}
+	for _, b := range fs.breakdowns {
+		if _, ok := byDim[b.Dimension]; !ok {
+			byDim[b.Dimension] = map[string]int64{}
+		}
+		byDim[b.Dimension][b.Value] += b.Count
+	}
+	if got := byDim["utm_source"]["newsletter"]; got != 1 {
+		t.Errorf("utm_source=newsletter count = %d, want 1", got)
+	}
+	if got := byDim["utm_campaign"]["spring-launch"]; got != 1 {
+		t.Errorf("utm_campaign=spring-launch count = %d, want 1", got)
+	}
+	if got := byDim["utm_source"]["unknown"]; got != 1 {
+		t.Errorf("utm_source=unknown count = %d, want 1", got)
+	}
+	// every dimension is produced for the two human visits
+	for _, dim := range UTMParams {
+		var total int64
+		for _, v := range byDim[dim] {
+			total += v
+		}
+		if total != 2 {
+			t.Errorf("dimension %s total = %d, want 2", dim, total)
+		}
+	}
+}
+
 func TestApplyFailureUndoesDedup(t *testing.T) {
 	fc := &fakeCache{}
 	fs := &fakeStore{fail: true}

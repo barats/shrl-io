@@ -27,20 +27,27 @@ type AnalyticsCache struct {
 func NewAnalyticsCache(rdb *redis.Client) *AnalyticsCache { return &AnalyticsCache{rdb: rdb} }
 
 // RecordVisit appends one event per redirect to a capped Redis stream. The
-// worker aggregates it into the analytics rollups.
-func (c *AnalyticsCache) RecordVisit(ctx context.Context, hostname, code, ip, userAgent, referrer string) error {
+// worker aggregates it into the analytics rollups. utm holds the recognized
+// UTM parameter values from the short URL; empty values are omitted.
+func (c *AnalyticsCache) RecordVisit(ctx context.Context, hostname, code, ip, userAgent, referrer string, utm map[string]string) error {
+	values := map[string]interface{}{
+		"hostname":   hostname,
+		"code":       code,
+		"ip":         ip,
+		"user_agent": userAgent,
+		"referrer":   referrer,
+		"ts":         time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	for k, v := range utm {
+		if v != "" {
+			values[k] = v
+		}
+	}
 	_, err := c.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: visitStream,
 		MaxLen: maxStreamLen,
 		Approx: true,
-		Values: map[string]interface{}{
-			"hostname":   hostname,
-			"code":       code,
-			"ip":         ip,
-			"user_agent": userAgent,
-			"referrer":   referrer,
-			"ts":         time.Now().UTC().Format(time.RFC3339Nano),
-		},
+		Values: values,
 	}).Result()
 	return err
 }

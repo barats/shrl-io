@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/barats/shrl-io/internal/analytics"
 	"github.com/barats/shrl-io/internal/cache"
 	"github.com/barats/shrl-io/internal/env"
 	"github.com/barats/shrl-io/internal/redisutil"
@@ -39,7 +40,7 @@ func main() {
 			return
 		}
 		host := hostOnly(r.Host)
-		dest, ok, err := linkCache.Get(r.Context(), host, code)
+		cl, ok, err := linkCache.Get(r.Context(), host, code)
 		if err != nil {
 			log.Printf("cache lookup error: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -52,7 +53,14 @@ func main() {
 			return
 		}
 		// Detached context: r.Context() is cancelled when this handler returns.
-		go analyticsCache.RecordVisit(context.Background(), host, code, clientIP(r), r.UserAgent(), r.Referer())
+		utm := analytics.UTMValues(r.URL.Query())
+		go analyticsCache.RecordVisit(context.Background(), host, code, clientIP(r), r.UserAgent(), r.Referer(), utm)
+		dest := cl.Destination
+		if cl.ForwardUTM {
+			if merged, err := analytics.MergeUTMIntoDestination(dest, utm); err == nil {
+				dest = merged
+			}
+		}
 		http.Redirect(w, r, dest, http.StatusFound)
 	})
 
