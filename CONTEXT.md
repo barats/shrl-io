@@ -19,6 +19,12 @@ by shrl.io; a `User` never chooses a `Code`. Unique per `Hostname`; never
 automatically reused after a `Link` is deleted.
 _Avoid_: slug, key
 
+**Code Length**:
+The exact number of characters in every auto-generated `Code` on the instance.
+A single per-instance setting an `Admin` changes in Settings, defaulting to 6
+and validated to 4-12; existing `Code`s keep serving when it changes.
+_Avoid_: code size, length limit
+
 **Hostname**:
 A domain an `Admin` registers in the Hostname Registry, on which `Link`s are
 served; one half of a `Link`'s identity. Every `User` may create `Link`s under

@@ -40,6 +40,7 @@ func testDB(t *testing.T) *gorm.DB {
 		store.NewTeamStore(db).Migrate,
 		store.NewInviteStore(db).Migrate,
 		store.NewAnalyticsStore(db).Migrate,
+		store.NewSettingStore(db).Migrate,
 	} {
 		if err := migrate(ctx); err != nil {
 			t.Fatalf("migrate: %v", err)
@@ -66,6 +67,7 @@ func newTestServer(t *testing.T) *server {
 		hostnames: hs,
 		teams:     store.NewTeamStore(db),
 		invites:   store.NewInviteStore(db),
+		settings:  store.NewSettingStore(db),
 		linkCache: cache.NewLinkCache(client),
 		cfg:       config{defaultHostname: "localhost", retentionDays: 30, tokenTTL: time.Hour},
 	}

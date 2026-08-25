@@ -24,6 +24,7 @@ type config struct {
 	adminUsername   string
 	adminPassword   string
 	defaultHostname string
+	codeLength      int
 	retentionDays   int
 	tokenTTL        time.Duration
 	warmInterval    time.Duration
@@ -37,6 +38,7 @@ func loadConfig() config {
 		adminUsername:   env.Or("SHRL_ADMIN_USERNAME", "admin"),
 		adminPassword:   os.Getenv("SHRL_ADMIN_PASSWORD"),
 		defaultHostname: env.Or("SHRL_DEFAULT_HOSTNAME", "localhost"),
+		codeLength:      env.Int("SHRL_CODE_LENGTH", domain.DefaultCodeLength),
 		retentionDays:   env.Int("SHRL_RETENTION_DAYS", 365),
 		tokenTTL:        time.Duration(env.Int("SHRL_TOKEN_TTL", 86400)) * time.Second,
 		warmInterval:    5 * time.Minute,
@@ -50,6 +52,7 @@ type server struct {
 	hostnames *store.HostnameStore
 	teams     *store.TeamStore
 	invites   *store.InviteStore
+	settings  *store.SettingStore
 	linkCache *cache.LinkCache
 	cfg       config
 }
@@ -65,6 +68,7 @@ func main() {
 	hostnames := store.NewHostnameStore(db)
 	teams := store.NewTeamStore(db)
 	invites := store.NewInviteStore(db)
+	settings := store.NewSettingStore(db)
 	if err := links.Migrate(ctx); err != nil {
 		log.Fatalf("migrate links: %v", err)
 	}
@@ -83,12 +87,16 @@ func main() {
 	if err := invites.Migrate(ctx); err != nil {
 		log.Fatalf("migrate invites: %v", err)
 	}
+	if err := settings.Migrate(ctx); err != nil {
+		log.Fatalf("migrate settings: %v", err)
+	}
 	bootstrapAdmin(ctx, users, cfg)
 	bootstrapHostnames(ctx, hostnames, cfg)
+	bootstrapSettings(ctx, settings, cfg)
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, invites: invites, linkCache: linkCache, cfg: cfg}
+	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, invites: invites, settings: settings, linkCache: linkCache, cfg: cfg}
 
 	go func() {
 		warm(ctx, links, linkCache)
@@ -144,6 +152,8 @@ func (s *server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /keys", s.createKey)
 	mux.HandleFunc("GET /keys", s.listKeys)
 	mux.HandleFunc("DELETE /keys/{id}", s.deleteKey)
+	mux.HandleFunc("GET /settings", s.getSettings)
+	mux.HandleFunc("PATCH /settings/code-length", s.updateCodeLength)
 	return mux
 }
 
@@ -200,6 +210,22 @@ func bootstrapHostnames(ctx context.Context, st *store.HostnameStore, cfg config
 	if err := st.Create(ctx, &domain.Hostname{Name: name}); err != nil && !errors.Is(err, store.ErrDuplicatedKey) {
 		log.Printf("register default hostname: %v", err)
 	}
+}
+
+// bootstrapSettings seeds the runtime-configurable settings from env on first
+// run; afterwards the database row is authoritative (ADR 0013).
+func bootstrapSettings(ctx context.Context, st *store.SettingStore, cfg config) {
+	ok, err := st.Has(ctx, domain.CodeLengthSetting)
+	if err != nil {
+		log.Fatalf("check settings: %v", err)
+	}
+	if ok {
+		return
+	}
+	if err := st.SetCodeLength(ctx, cfg.codeLength); err != nil {
+		log.Fatalf("seed settings: %v", err)
+	}
+	log.Printf("seeded code length setting: %d", cfg.codeLength)
 }
 
 func warm(ctx context.Context, st *store.LinkStore, ca *cache.LinkCache) {
@@ -325,8 +351,14 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		return
 	}
 
+	codeLength, err := s.settings.CodeLength(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to read settings")
+		return
+	}
+
 	for attempt := 0; attempt < 8; attempt++ {
-		code, err := domain.GenerateCode()
+		code, err := domain.GenerateCode(codeLength)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "code generation failed")
 			return

@@ -52,6 +52,14 @@
 	let deleting = $state<number | null>(null);
 	let userActionError = $state('');
 
+	// Code length
+	let codeLength = $state(6);
+	let cLoading = $state(true);
+	let cError = $state('');
+	let savingCodeLength = $state(false);
+	let codeLengthSaved = $state(false);
+	let codeLengthError = $state('');
+
 	// Teams
 	let teams = $state<Team[]>([]);
 	let tLoading = $state(true);
@@ -68,8 +76,37 @@
 		} catch {
 			/* session is required; the layout guards it */
 		}
-		await Promise.all([loadHostnames(), loadUsers(), loadTeams()]);
+		await Promise.all([loadCodeLength(), loadHostnames(), loadUsers(), loadTeams()]);
 	});
+
+	async function loadCodeLength() {
+		cLoading = true;
+		cError = '';
+		try {
+			const s = await api.getSettings();
+			codeLength = s.code_length;
+		} catch (e) {
+			cError = (e as Error).message;
+		} finally {
+			cLoading = false;
+		}
+	}
+
+	async function saveCodeLength(event: SubmitEvent) {
+		event.preventDefault();
+		savingCodeLength = true;
+		codeLengthError = '';
+		codeLengthSaved = false;
+		try {
+			const s = await api.updateCodeLength(codeLength);
+			codeLength = s.code_length;
+			codeLengthSaved = true;
+		} catch (e) {
+			codeLengthError = (e as Error).message;
+		} finally {
+			savingCodeLength = false;
+		}
+	}
 
 	async function loadHostnames() {
 		hLoading = true;
@@ -220,10 +257,60 @@
 
 <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 <p class="mt-1 text-sm text-muted-foreground">
-	Instance administration: Hostnames, accounts, and Teams.
+	Instance administration: Code length, Hostnames, accounts, and Teams.
 </p>
 
 <div class="mt-6 space-y-6">
+	<Card>
+		<CardHeader>
+			<CardTitle>Code generation</CardTitle>
+			<CardDescription>
+				The exact length of every auto-generated Code (e.g. 6 → <code>abc123</code>).
+				Applies to newly created Links; existing Links keep serving.
+			</CardDescription>
+		</CardHeader>
+		<CardContent>
+			{#if cError}
+				<Alert variant="destructive" class="mb-4">
+					<TriangleAlert class="size-4" />
+					<AlertTitle>Could not load settings</AlertTitle>
+					<AlertDescription>{cError}</AlertDescription>
+				</Alert>
+			{/if}
+			{#if codeLengthError}
+				<Alert variant="destructive" class="mb-4">
+					<TriangleAlert class="size-4" />
+					<AlertDescription>{codeLengthError}</AlertDescription>
+				</Alert>
+			{/if}
+			{#if codeLengthSaved}
+				<Alert class="mb-4">
+					<KeyRound class="size-4" />
+					<AlertDescription>Code length saved. New Links will use it.</AlertDescription>
+				</Alert>
+			{/if}
+			<form onsubmit={saveCodeLength} class="flex flex-wrap items-end gap-4">
+				<div class="space-y-2">
+					<Label for="code-length">Code length</Label>
+					<Input
+						id="code-length"
+						type="number"
+						min={4}
+						max={12}
+						step={1}
+						bind:value={codeLength}
+						class="w-28"
+						disabled={cLoading}
+						required
+					/>
+				</div>
+				<Button type="submit" disabled={savingCodeLength || cLoading}>
+					{savingCodeLength ? 'Saving…' : 'Save'}
+				</Button>
+			</form>
+		</CardContent>
+	</Card>
+
 	<Card>
 		<CardHeader>
 			<CardTitle>Hostnames</CardTitle>

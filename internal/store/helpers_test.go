@@ -31,6 +31,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 		NewTeamStore(db).Migrate,
 		NewInviteStore(db).Migrate,
 		NewAnalyticsStore(db).Migrate,
+		NewSettingStore(db).Migrate,
 	} {
 		if err := migrate(ctx); err != nil {
 			t.Fatalf("migrate: %v", err)

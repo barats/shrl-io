@@ -62,6 +62,10 @@ export interface ApiKey {
 	created_at: string;
 }
 
+export interface Settings {
+	code_length: number;
+}
+
 export interface AnalyticsResponse {
 	hostname: string;
 	code: string;

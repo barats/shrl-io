@@ -47,8 +47,10 @@ teams and individuals who want full control over their link data.
 
 ### Link management
 
-- **Auto codes**: shrl.io generates every **Code**: 6 characters, lowercase,
-  from an unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code.
+- **Auto codes**: shrl.io generates every **Code**: lowercase, from an
+  unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code. The
+  exact **Code Length** defaults to 6; an Admin can set it per instance
+  (4–12) in Settings.
 - **Admin-managed hostnames**: an **Admin** registers **Hostnames**; Users
   select from the registry when creating a Link. A Code is unique per Hostname.
 - **Remark**: an optional note on a Link so you can remember what it does;
@@ -257,6 +259,7 @@ All services are configured via environment variables.
 | `SHRL_API_ADDR`         | `:8080`                                              | api           | API listen address                               |
 | `SHRL_REDIRECTOR_ADDR`  | `:8080`                                              | redirector    | Redirector listen address                        |
 | `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, frontend| Hostname auto-registered on first run; used when a request specifies none |
+| `SHRL_CODE_LENGTH`      | `6`                                                  | api           | Seed for the per-instance Code Length setting (4–12) |
 | `SHRL_RETENTION_DAYS`   | `365`                                                | api, worker   | Analytics retention window (daily rollups)       |
 | `SHRL_GEOLITE_LICENSE`  | *(unset)*                                            | worker        | MaxMind license key; enables GeoIP attribution   |
 | `SHRL_GEOLITE_DB_PATH`  | `/data/GeoLite2-City.mmdb`                           | worker        | Path to the GeoLite2 City database               |
@@ -285,6 +288,8 @@ Team they belong to.
 | POST   | `/keys`                               | Create an API key; the secret is shown once          |
 | GET    | `/keys`                               | List your API keys                                   |
 | DELETE | `/keys/{id}`                          | Revoke an API key                                    |
+| GET    | `/settings`                           | Instance settings (admin only)                       |
+| PATCH  | `/settings/code-length`               | Set the per-instance Code Length, 4-12 (admin only)  |
 | POST   | `/links`                               | Create a Link (Code auto-generated; Remark optional) |
 | GET    | `/links`                               | List the current user's Links for a Hostname        |
 | GET    | `/hostnames`                           | List registered Hostnames (the registry)            |

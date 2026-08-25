@@ -4,6 +4,7 @@ import type {
 	BreakdownResponse,
 	InviteCode,
 	Link,
+	Settings,
 	Team,
 	TeamDetail,
 	TeamMember,
@@ -280,6 +281,20 @@ export const api = {
 
 	async resetUserPassword(id: number): Promise<{ password: string }> {
 		return req<{ password: string }>(`users/${id}/reset`, { method: 'POST' });
+	},
+
+	// --- Settings ---
+
+	async getSettings(): Promise<Settings> {
+		return req<Settings>('settings');
+	},
+
+	async updateCodeLength(codeLength: number): Promise<Settings> {
+		return req<Settings>('settings/code-length', {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ code_length: codeLength })
+		});
 	}
 };
 
