@@ -5,8 +5,7 @@
    ╚════██║██╔══██║██╔══██╗██║         ██║██║   ██║
    ███████║██║  ██║██║  ██║███████╗ ██ ██║╚██████╔╝
    ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚╝ ╚═╝  ╚═════╝
-   shrl.io
-   SELF-HOSTED URL SHORTENER & TRAFFIC ANALYZER
+   https://www.shrl.io   
 ```
 
 > **Status: MVP** — self-hosted redirects, privacy-first analytics, a multi-user admin UI, and Teams today. QR codes, rate limiting, and UTM are planned (see [Roadmap](#roadmap)).
