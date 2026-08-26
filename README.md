@@ -276,40 +276,106 @@ Visitor IPs are never stored, only the derived location.
 
 ## Configuration
 
-All services are configured via environment variables.
+All services are configured via environment variables. Each service reads its
+own set; variables shared across services (Postgres, Redis, retention) are
+listed per service so every section is self-contained.
 
-| Variable                | Default                                              | Services      | Purpose                                          |
-|-------------------------|------------------------------------------------------|---------------|--------------------------------------------------|
-| `SHRL_ADMIN_USERNAME`   | `admin`                                              | api           | Username of the first-run Admin account          |
-| `SHRL_ADMIN_PASSWORD`   | *(random, shown once)*                               | api           | First-run Admin password (bcrypt-hashed)         |
-| `SHRL_TOKEN_TTL`        | `86400`                                              | api           | Bearer token lifetime in seconds                 |
-| `SHRL_DATABASE_URL`     | `postgres://shrl:shrl@localhost:5432/shrl`           | api, auth, worker | PostgreSQL connection string                 |
-| `SHRL_DB_MAX_OPEN_CONNS` | `20`                                               | api, auth, worker | Max open Postgres connections                 |
-| `SHRL_DB_MAX_IDLE_CONNS` | `5`                                                | api, auth, worker | Max idle Postgres connections                 |
-| `SHRL_DB_CONN_MAX_LIFETIME` | `30m`                                          | api, auth, worker | Max lifetime of a Postgres connection         |
-| `SHRL_DB_CONN_MAX_IDLE_TIME` | `5m`                                           | api, auth, worker | Max idle time of a Postgres connection        |
-| `SHRL_REDIS_ADDR`       | `localhost:6379`                                     | all           | Redis address                                    |
-| `SHRL_REDIS_POOL_SIZE`  | `50` (redirector) / `0` (auto, 10×CPU)               | all           | Redis connection pool size                       |
-| `SHRL_REDIS_MIN_IDLE_CONNS` | `5` (redirector) / `2` (others)                 | all           | Minimum idle Redis connections                   |
-| `SHRL_API_ADDR`         | `:8080`                                              | api           | Internal API listen address                      |
-| `SHRL_API_INTERNAL_SECRET` | `dev-internal-secret`                             | api, frontend | Shared secret the Internal API demands on every request (set to the same value on both) |
-| `SHRL_AUTH_ADDR`        | `:8080`                                              | auth          | Auth API listen address                          |
-| `SHRL_AUTH_RATE_LIMIT_IP` | `60`                                              | auth          | Per-IP requests per minute on the Auth API       |
-| `SHRL_AUTH_RATE_LIMIT_KEY_READ` | `300`                                        | auth          | Per-key reads per minute on the Auth API         |
-| `SHRL_AUTH_RATE_LIMIT_KEY_WRITE` | `30`                                        | auth          | Per-key writes per minute on the Auth API        |
-| `SHRL_AUTH_RATE_LIMIT_FAIL` | `10`                                              | auth          | Failed key validations per minute per IP         |
-| `SHRL_REDIRECTOR_ADDR`  | `:8080`                                              | redirector    | Redirector listen address                        |
-| `SHRL_REDIRECTOR_RATE_LIMIT_IP` | `600`                                          | redirector    | Per-IP redirects per minute; `0` disables        |
-| `SHRL_REDIRECTOR_RATE_LIMIT_LINK` | `3000`                                       | redirector    | Per-Link redirects per minute; `0` disables      |
-| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, auth, frontend | Hostname auto-registered on first run and pre-selected when creating a Link |
-| `SHRL_CODE_LENGTH`      | `6`                                                  | api           | Seed for the per-instance Code Length setting (4–12) |
-| `SHRL_RETENTION_DAYS`   | `365`                                                | api, auth, worker | Analytics retention window (daily rollups)    |
-| `SHRL_GEOLITE_LICENSE`  | *(unset)*                                            | worker        | MaxMind license key; enables GeoIP attribution   |
-| `SHRL_GEOLITE_DB_PATH`  | `/data/GeoLite2-City.mmdb`                           | worker        | Path to the GeoLite2 City database               |
-| `SHRL_API_URL`          | `http://localhost:8080`                              | frontend      | Internal API address the UI proxies to           |
-| `SHRL_SESSION_SECRET`   | *(random per boot)*                                  | frontend      | HMAC secret for signing UI session cookies       |
-| `SHRL_SESSION_TTL`      | `86400`                                              | frontend      | UI session cookie lifetime in seconds            |
-| `SHRL_COOKIE_SECURE`    | `false`                                              | frontend      | Set `true` to send the session cookie over TLS only |
+### Redirector
+
+The Redis-only public server that 302s visitors to their Destination and
+records each Visit onto the Redis stream (ADR 0001, ADR 0018). Reads Links from
+Redis only, never from Postgres.
+
+| Variable                          | Default          | Purpose                                    |
+|-----------------------------------|------------------|--------------------------------------------|
+| `SHRL_REDIRECTOR_ADDR`            | `:8080`          | Redirector listen address                  |
+| `SHRL_REDIRECTOR_RATE_LIMIT_IP`   | `600`            | Per-IP redirects per minute; `0` disables  |
+| `SHRL_REDIRECTOR_RATE_LIMIT_LINK` | `3000`           | Per-Link redirects per minute; `0` disables |
+| `SHRL_REDIS_ADDR`                 | `localhost:6379` | Redis address                              |
+| `SHRL_REDIS_POOL_SIZE`            | `50`             | Redis connection pool size                 |
+| `SHRL_REDIS_MIN_IDLE_CONNS`       | `5`              | Minimum idle Redis connections             |
+
+### Worker
+
+The analytics aggregator: consumes the Redis visit stream in batches and
+upserts daily, lifetime, and breakdown rollups into Postgres in a single
+transaction (ADR 0003).
+
+| Variable                  | Default                                              | Purpose                                       |
+|---------------------------|------------------------------------------------------|-----------------------------------------------|
+| `SHRL_DATABASE_URL`       | `postgres://shrl:shrl@localhost:5432/shrl`           | PostgreSQL connection string                  |
+| `SHRL_DB_MAX_OPEN_CONNS`  | `20`                                                 | Max open Postgres connections                 |
+| `SHRL_DB_MAX_IDLE_CONNS`  | `5`                                                  | Max idle Postgres connections                 |
+| `SHRL_DB_CONN_MAX_LIFETIME` | `30m`                                              | Max lifetime of a Postgres connection         |
+| `SHRL_DB_CONN_MAX_IDLE_TIME` | `5m`                                               | Max idle time of a Postgres connection        |
+| `SHRL_REDIS_ADDR`         | `localhost:6379`                                     | Redis address                                 |
+| `SHRL_REDIS_POOL_SIZE`    | `0` (auto, 10×CPU)                                   | Redis connection pool size                    |
+| `SHRL_REDIS_MIN_IDLE_CONNS` | `2`                                                | Minimum idle Redis connections                |
+| `SHRL_RETENTION_DAYS`     | `365`                                                | Analytics retention window (daily rollups)    |
+| `SHRL_GEOLITE_LICENSE`    | *(unset)*                                            | MaxMind license key; enables GeoIP attribution |
+| `SHRL_GEOLITE_DB_PATH`    | `/data/GeoLite2-City.mmdb`                           | Path to the GeoLite2 City database            |
+
+### Internal API
+
+The API that serves the UI — reachable only by the frontend, which proxies
+every request on the signed-in user's behalf and presents the session token
+(ADR 0015).
+
+| Variable                  | Default                                              | Purpose                                       |
+|---------------------------|------------------------------------------------------|-----------------------------------------------|
+| `SHRL_API_ADDR`           | `:8080`                                              | Internal API listen address                   |
+| `SHRL_API_INTERNAL_SECRET` | `dev-internal-secret`                               | Shared secret the Internal API demands on every request (set to the same value on the frontend) |
+| `SHRL_ADMIN_USERNAME`     | `admin`                                              | Username of the first-run Admin account       |
+| `SHRL_ADMIN_PASSWORD`     | *(random, shown once)*                               | First-run Admin password (bcrypt-hashed)      |
+| `SHRL_TOKEN_TTL`          | `86400`                                              | Bearer token lifetime in seconds              |
+| `SHRL_CODE_LENGTH`        | `6`                                                  | Seed for the per-instance Code Length setting (4–12) |
+| `SHRL_DEFAULT_HOSTNAME`   | `localhost`                                          | Hostname auto-registered on first run and pre-selected when creating a Link |
+| `SHRL_DATABASE_URL`       | `postgres://shrl:shrl@localhost:5432/shrl`           | PostgreSQL connection string                  |
+| `SHRL_DB_MAX_OPEN_CONNS`  | `20`                                                 | Max open Postgres connections                 |
+| `SHRL_DB_MAX_IDLE_CONNS`  | `5`                                                  | Max idle Postgres connections                 |
+| `SHRL_DB_CONN_MAX_LIFETIME` | `30m`                                              | Max lifetime of a Postgres connection         |
+| `SHRL_DB_CONN_MAX_IDLE_TIME` | `5m`                                               | Max idle time of a Postgres connection        |
+| `SHRL_REDIS_ADDR`         | `localhost:6379`                                     | Redis address                                 |
+| `SHRL_REDIS_POOL_SIZE`    | `0` (auto, 10×CPU)                                   | Redis connection pool size                    |
+| `SHRL_REDIS_MIN_IDLE_CONNS` | `2`                                                | Minimum idle Redis connections                |
+| `SHRL_RETENTION_DAYS`     | `365`                                                | Analytics retention window (daily rollups)    |
+
+### Auth API
+
+The public `/v1` API for scripts and CI, authenticated by an API key on every
+request and rate-limited per IP and per key (ADR 0016, ADR 0017).
+
+| Variable                        | Default                                              | Purpose                                      |
+|---------------------------------|------------------------------------------------------|----------------------------------------------|
+| `SHRL_AUTH_ADDR`                | `:8080`                                              | Auth API listen address                      |
+| `SHRL_AUTH_RATE_LIMIT_IP`       | `60`                                                 | Per-IP requests per minute                   |
+| `SHRL_AUTH_RATE_LIMIT_KEY_READ` | `300`                                                | Per-key reads per minute                     |
+| `SHRL_AUTH_RATE_LIMIT_KEY_WRITE`| `30`                                                 | Per-key writes per minute                    |
+| `SHRL_AUTH_RATE_LIMIT_FAIL`     | `10`                                                 | Failed key validations per minute per IP     |
+| `SHRL_DEFAULT_HOSTNAME`         | `localhost`                                          | Hostname pre-selected when creating a Link   |
+| `SHRL_DATABASE_URL`             | `postgres://shrl:shrl@localhost:5432/shrl`           | PostgreSQL connection string                 |
+| `SHRL_DB_MAX_OPEN_CONNS`        | `20`                                                 | Max open Postgres connections                |
+| `SHRL_DB_MAX_IDLE_CONNS`        | `5`                                                  | Max idle Postgres connections                |
+| `SHRL_DB_CONN_MAX_LIFETIME`     | `30m`                                                | Max lifetime of a Postgres connection        |
+| `SHRL_DB_CONN_MAX_IDLE_TIME`    | `5m`                                                 | Max idle time of a Postgres connection       |
+| `SHRL_REDIS_ADDR`               | `localhost:6379`                                     | Redis address                                |
+| `SHRL_REDIS_POOL_SIZE`          | `0` (auto, 10×CPU)                                   | Redis connection pool size                   |
+| `SHRL_REDIS_MIN_IDLE_CONNS`     | `2`                                                  | Minimum idle Redis connections               |
+| `SHRL_RETENTION_DAYS`           | `365`                                                | Analytics retention window (daily rollups)   |
+
+### Frontend
+
+The SvelteKit admin UI: signs users in with an HttpOnly session cookie and
+proxies every API call to the Internal API (ADR 0005).
+
+| Variable                  | Default                  | Purpose                                                    |
+|---------------------------|--------------------------|------------------------------------------------------------|
+| `SHRL_API_URL`            | `http://localhost:8080`  | Internal API address the UI proxies to                     |
+| `SHRL_API_INTERNAL_SECRET` | `dev-internal-secret`   | Shared secret the Internal API demands on every request (set to the same value on the api) |
+| `SHRL_DEFAULT_HOSTNAME`   | `localhost`              | Hostname pre-selected when creating a Link                 |
+| `SHRL_SESSION_SECRET`     | *(random per boot)*      | HMAC secret for signing UI session cookies                 |
+| `SHRL_SESSION_TTL`        | `86400`                  | UI session cookie lifetime in seconds                      |
+| `SHRL_COOKIE_SECURE`      | `false`                  | Set `true` to send the session cookie over TLS only        |
 
 ## API reference
 
@@ -354,8 +420,9 @@ The **Auth API** is the public `/v1` surface for scripts and CI. Every
 request must present a valid **API key** as `Authorization: Bearer <key>`
 (missing or invalid keys get `401`). It serves everything except deletion for
 both Personal and Team Links; admin, key-management, and login endpoints are
-not exposed. Requests are rate-limited per IP and per key (see the env table);
-excess requests get `429` with a `Retry-After` header.
+not exposed. Requests are rate-limited per IP and per key (see the Auth API
+[configuration](#auth-api) below); excess requests get `429` with a
+`Retry-After` header.
 
 | Method | Path                                   | Purpose                                             |
 |--------|----------------------------------------|-----------------------------------------------------|
