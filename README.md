@@ -36,14 +36,16 @@ teams and individuals who want full control over their link data.
 - 📊 **Rich analytics**: visits, unique **Visitors**, daily time series, and
   breakdowns by referrer, device, OS, browser, country, region, city, and the
   six UTM parameters — with optional per-link forwarding to the Destination.
-- 🏠 **Simple to self-host**: one `podman compose up` brings up the whole
-  stack; no external accounts required (GeoIP attribution is optional).
+- 🏠 **Simple to self-host**: one `podman compose -f dev.compose.yaml up --build`
+  brings up the whole stack; no external accounts required (GeoIP attribution
+  is optional).
 - 🖥️ **Built-in admin UI**: sign in with your account and manage Links from
   the browser, no curl required.
 - 🛡️ **Secure by default**: URL validation and open-redirect protection, plus
   password accounts with bearer-token auth. The internal API is frontend-only
   (never published to the host); scripts and CI use the public Auth API with
-  an API key, rate-limited per key and per IP.
+  an API key, rate-limited per key and per IP, and the redirector rate-limits
+  per IP and per Link.
 
 ## Features
 
@@ -136,6 +138,12 @@ teams and individuals who want full control over their link data.
   0015). The **Auth API** is public and validates an **API Key** on every
   request, rate-limited per key and per IP; keys are checked against
   Postgres, the single source of truth (ADR 0017).
+- **Redirect rate limiting**: the redirector caps Redirects per IP and per
+  Link on a 1-minute window (`SHRL_REDIRECTOR_RATE_LIMIT_IP`,
+  `SHRL_REDIRECTOR_RATE_LIMIT_LINK`; `0` disables a bucket). Excess requests
+  get `429` with `Retry-After`, are not redirected, and are not recorded as
+  Visits. The counters are transient TTL'd Redis keys, so visitor IPs are
+  still never stored (ADR 0004).
 - **No raw IPs persisted**: Visitor identity is stored as a hash of
   `(Link, day, IP + user-agent)`; the IP itself is never written.
 
@@ -184,8 +192,10 @@ teams and individuals who want full control over their link data.
 1. **Create**: the api or auth service writes a Link to PostgreSQL, then caches
    it in Redis (write-through). The api also re-warms the cache every 5
    minutes.
-2. **Redirect**: the redirector reads the Link from Redis — never PostgreSQL —
-   and returns a 302. It pushes a Visit event onto the Redis stream.
+2. **Redirect**: the redirector rate-limits per IP and per Link, reads the
+   Link from Redis — never PostgreSQL — and returns a 302. It pushes a Visit
+   event onto the Redis stream. Requests over a limit get `429` with
+   `Retry-After` and are neither redirected nor recorded as Visits.
 3. **Aggregate**: the worker consumes the stream in batches and upserts daily,
    lifetime, and breakdown rollups into PostgreSQL in a single transaction;
    stale rollups are pruned after the retention window.
@@ -196,8 +206,6 @@ Planned, not yet built:
 
 - **Geographic maps**: country/region map views in the admin analytics screen
   (the base dashboard UI now ships with charts)
-- **Rate limiting** on the redirector (the Auth API is already rate-limited
-  per key and per IP)
 
 ## Development
 
@@ -205,7 +213,10 @@ Prerequisites: Go 1.25+, podman (with podman-compose).
 
 ### Run the full stack
 
-    podman compose up --build
+`dev.compose.yaml` is the local development stack (it builds images from
+source). A production compose file that pulls prebuilt images is planned.
+
+    podman compose -f dev.compose.yaml up --build
 
 On first run the api provisions an **admin** account: the password is either
 `SHRL_ADMIN_PASSWORD` (if set) or a random value printed once to the api
@@ -230,6 +241,8 @@ on the Account page of the UI (it is shown once), then:
       -d '{"hostname":"localhost","destination":"https://example.com"}'
 
 Then visit `http://localhost:8080/{code}` — you get a 302 to the destination.
+The redirector rate-limits per IP (default 600 req/min) and per Link (default
+3000 req/min); excess requests get `429` with a `Retry-After` header.
 
 The Auth API is rate-limited per IP (default 60 req/min) and per key (300
 req/min reads, 30 req/min writes); excess requests get `429` with a
@@ -269,7 +282,13 @@ All services are configured via environment variables.
 | `SHRL_ADMIN_PASSWORD`   | *(random, shown once)*                               | api           | First-run Admin password (bcrypt-hashed)         |
 | `SHRL_TOKEN_TTL`        | `86400`                                              | api           | Bearer token lifetime in seconds                 |
 | `SHRL_DATABASE_URL`     | `postgres://shrl:shrl@localhost:5432/shrl`           | api, auth, worker | PostgreSQL connection string                 |
+| `SHRL_DB_MAX_OPEN_CONNS` | `20`                                               | api, auth, worker | Max open Postgres connections                 |
+| `SHRL_DB_MAX_IDLE_CONNS` | `5`                                                | api, auth, worker | Max idle Postgres connections                 |
+| `SHRL_DB_CONN_MAX_LIFETIME` | `30m`                                          | api, auth, worker | Max lifetime of a Postgres connection         |
+| `SHRL_DB_CONN_MAX_IDLE_TIME` | `5m`                                           | api, auth, worker | Max idle time of a Postgres connection        |
 | `SHRL_REDIS_ADDR`       | `localhost:6379`                                     | all           | Redis address                                    |
+| `SHRL_REDIS_POOL_SIZE`  | `50` (redirector) / `0` (auto, 10×CPU)               | all           | Redis connection pool size                       |
+| `SHRL_REDIS_MIN_IDLE_CONNS` | `5` (redirector) / `2` (others)                 | all           | Minimum idle Redis connections                   |
 | `SHRL_API_ADDR`         | `:8080`                                              | api           | Internal API listen address                      |
 | `SHRL_API_INTERNAL_SECRET` | `dev-internal-secret`                             | api, frontend | Shared secret the Internal API demands on every request (set to the same value on both) |
 | `SHRL_AUTH_ADDR`        | `:8080`                                              | auth          | Auth API listen address                          |
@@ -278,6 +297,8 @@ All services are configured via environment variables.
 | `SHRL_AUTH_RATE_LIMIT_KEY_WRITE` | `30`                                        | auth          | Per-key writes per minute on the Auth API        |
 | `SHRL_AUTH_RATE_LIMIT_FAIL` | `10`                                              | auth          | Failed key validations per minute per IP         |
 | `SHRL_REDIRECTOR_ADDR`  | `:8080`                                              | redirector    | Redirector listen address                        |
+| `SHRL_REDIRECTOR_RATE_LIMIT_IP` | `600`                                          | redirector    | Per-IP redirects per minute; `0` disables        |
+| `SHRL_REDIRECTOR_RATE_LIMIT_LINK` | `3000`                                       | redirector    | Per-Link redirects per minute; `0` disables      |
 | `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, auth, frontend | Hostname auto-registered on first run; used when a request specifies none |
 | `SHRL_CODE_LENGTH`      | `6`                                                  | api           | Seed for the per-instance Code Length setting (4–12) |
 | `SHRL_RETENTION_DAYS`   | `365`                                                | api, auth, worker | Analytics retention window (daily rollups)    |
@@ -285,65 +306,16 @@ All services are configured via environment variables.
 | `SHRL_GEOLITE_DB_PATH`  | `/data/GeoLite2-City.mmdb`                           | worker        | Path to the GeoLite2 City database               |
 | `SHRL_API_URL`          | `http://localhost:8080`                              | frontend      | Internal API address the UI proxies to           |
 | `SHRL_SESSION_SECRET`   | *(random per boot)*                                  | frontend      | HMAC secret for signing UI session cookies       |
+| `SHRL_SESSION_TTL`      | `86400`                                              | frontend      | UI session cookie lifetime in seconds            |
 | `SHRL_COOKIE_SECURE`    | `false`                                              | frontend      | Set `true` to send the session cookie over TLS only |
 
 ## API reference
 
-Two API surfaces exist. The **Internal API** is frontend-only: it demands the
-shared `X-Shrl-Internal-Secret` header on every request (ADR 0015) and every
-endpoint except `POST /login` and `POST /logout` additionally requires
-`Authorization: Bearer <token>`. The **Auth API** (below) is public and
-authenticates with an API key.
+Programmatic access goes through the **Auth API** below: the public `/v1`
+surface authenticated with an API key. The **Internal API** that serves the
+UI is frontend-only (ADR 0015) and is not documented here.
 
-### Internal API (frontend only)
-
-Every endpoint except `POST /login` and `POST /logout` requires
-`Authorization: Bearer <token>`; requests without a valid token get `401`.
-Get a token from `POST /login`. Links are scoped to the authenticated User: a
-User sees the Personal Links they created and, read-only, the Links of any
-Team they belong to.
-
-| Method | Path                                   | Purpose                                             |
-|--------|----------------------------------------|-----------------------------------------------------|
-| POST   | `/login`                               | Sign in; returns a bearer `token` and the `user`    |
-| POST   | `/logout`                              | Revoke the presented token                          |
-| GET    | `/me`                                  | The authenticated user                              |
-| GET    | `/users`                               | List users (admin only)                             |
-| POST   | `/users`                               | Create a user (admin only); password returned once  |
-| DELETE | `/users/{id}`                          | Delete a user (admin only): removes Personal Links and memberships; Team Links stay with the Team |
-| POST   | `/users/{id}/reset`                   | Reset a user's password (admin only); temp password shown once, forced change on next sign-in |
-| POST   | `/account/password`                   | Change your own password; revokes other tokens and all API keys |
-| POST   | `/keys`                               | Create an API key; the secret is shown once          |
-| GET    | `/keys`                               | List your API keys                                   |
-| DELETE | `/keys/{id}`                          | Revoke an API key                                    |
-| GET    | `/settings`                           | Instance settings (admin only)                       |
-| PATCH  | `/settings/code-length`               | Set the per-instance Code Length, 4-12 (admin only)  |
-| POST   | `/links`                               | Create a Link (Code auto-generated; Remark and Forward UTM optional) |
-| GET    | `/links`                               | List the current user's Links for a Hostname        |
-| GET    | `/hostnames`                           | List registered Hostnames (the registry)            |
-| POST   | `/hostnames`                           | Register a Hostname (admin only)                    |
-| DELETE | `/hostnames/{hostname}`                | Remove a Hostname from the registry (admin only)    |
-| GET    | `/links/{code}`                        | Get a Link                                          |
-| PATCH  | `/links/{code}`                        | Update a Link's Destination, Remark, and Forward UTM |
-| POST   | `/links/{code}/disable`                | Disable a Link (redirector returns 404)             |
-| POST   | `/links/{code}/enable`                 | Enable a Link                                       |
-| DELETE | `/links/{code}`                        | Delete a Link                                       |
-| GET    | `/links/{code}/analytics`              | Lifetime and window visit totals                    |
-| GET    | `/links/{code}/analytics/timeseries`   | Daily visit buckets in the window, ascending        |
-| GET    | `/links/{code}/analytics/breakdowns`   | Top-N dimension values in the window                |
-| POST   | `/teams`                               | Create a Team (admin only); the admin becomes first Team Owner |
-| GET    | `/teams`                               | List the caller's Teams (with their role); admins see all |
-| GET    | `/teams/{id}`                          | Team details and members (members and admins)       |
-| GET    | `/teams/{id}/links`                    | The Team's Links, read-only for members             |
-| POST   | `/teams/{id}/links`                    | Create a Link in the Team (members)                 |
-| POST   | `/teams/{id}/members`                  | Add an existing user as a member (admin only)       |
-| PATCH  | `/teams/{id}/members/{userID}`         | Promote or demote a member (Team Owner)             |
-| DELETE | `/teams/{id}/members/{userID}`         | Remove a member (Team Owner); a member may remove themself |
-| POST   | `/teams/{id}/invites`                  | Generate a single-use Invite Code (Team Owner)      |
-| GET    | `/teams/{id}/invites`                  | List outstanding Invite Codes (Team Owner)          |
-| DELETE | `/teams/{id}/invites/{code}`           | Revoke an outstanding Invite Code (Team Owner)      |
-| POST   | `/teams/join`                          | Join a Team by entering an Invite Code              |
-| DELETE | `/teams/{id}`                          | Delete a Team (admin only); its Links revert to Personal |
+### API model
 
 A Link is a JSON object: `hostname`, `code`, `destination`, `remark`,
 `forward_utm`, `disabled`, `created_by`, `team_id`, `created_at`, `updated_at`.
