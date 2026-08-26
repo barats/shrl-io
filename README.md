@@ -280,6 +280,12 @@ All services are configured via environment variables. Each service reads its
 own set; variables shared across services (Postgres, Redis, retention) are
 listed per service so every section is self-contained.
 
+To run a service without compose (or to override compose defaults), start from
+the repo-root `.env.example`: copy it to `.env` and adjust. Compose reads the
+root `.env` automatically; standalone Go runs need it sourced first
+(`set -a; source .env; set +a`). The file mirrors the tables below, one
+section per service.
+
 ### Redirector
 
 The Redis-only public server that 302s visitors to their Destination and
