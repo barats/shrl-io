@@ -21,30 +21,30 @@ func TestAnalyticsStoreReads(t *testing.T) {
 	day2 := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
 
 	seed := []*domain.DailyStats{
-		{Hostname: "localhost", Code: "abc", Day: day1, Visits: 5, UniqueVisitors: 3},
-		{Hostname: "localhost", Code: "abc", Day: day2, Visits: 7, UniqueVisitors: 4},
-		{Hostname: "localhost", Code: "other", Day: day1, Visits: 99, UniqueVisitors: 99},
+		{Code: "abc", Day: day1, Visits: 5, UniqueVisitors: 3},
+		{Code: "abc", Day: day2, Visits: 7, UniqueVisitors: 4},
+		{Code: "other", Day: day1, Visits: 99, UniqueVisitors: 99},
 	}
 	for _, d := range seed {
 		if err := db.Create(d).Error; err != nil {
 			t.Fatalf("seed daily: %v", err)
 		}
 	}
-	if err := db.Create(&domain.LifetimeStats{Hostname: "localhost", Code: "abc", TotalVisits: 12}).Error; err != nil {
+	if err := db.Create(&domain.LifetimeStats{Code: "abc", TotalVisits: 12}).Error; err != nil {
 		t.Fatalf("seed lifetime: %v", err)
 	}
 
-	lt, err := s.GetLifetime(ctx, "localhost", "abc")
+	lt, err := s.GetLifetime(ctx, "abc")
 	if err != nil || lt.TotalVisits != 12 {
 		t.Fatalf("lifetime = %+v, %v", lt, err)
 	}
 
-	visits, uniques, err := s.SumDailyStats(ctx, "localhost", "abc", day1, day2)
+	visits, uniques, err := s.SumDailyStats(ctx, "abc", day1, day2)
 	if err != nil || visits != 12 || uniques != 7 {
 		t.Fatalf("sum = %d/%d, %v (want 12/7)", visits, uniques, err)
 	}
 
-	rows, err := s.GetTimeseries(ctx, "localhost", "abc", day1, day2)
+	rows, err := s.GetTimeseries(ctx, "abc", day1, day2)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("timeseries = %+v, %v", rows, err)
 	}
@@ -63,7 +63,7 @@ func TestAnalyticsStoreBreakdownsLimit(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		value := "ref" + string(rune('a'+i)) + ".example"
 		if err := db.Create(&domain.Breakdown{
-			Hostname: "localhost", Code: "abc", Day: day, Dimension: "referrer",
+			Code: "abc", Day: day, Dimension: "referrer",
 			Value: value, Count: int64(12 - i),
 		}).Error; err != nil {
 			t.Fatalf("seed breakdown: %v", err)
@@ -71,7 +71,7 @@ func TestAnalyticsStoreBreakdownsLimit(t *testing.T) {
 	}
 
 	// top 5 by count, descending
-	tops, err := s.GetBreakdowns(ctx, "localhost", "abc", "referrer", day, day, 5)
+	tops, err := s.GetBreakdowns(ctx, "abc", "referrer", day, day, 5)
 	if err != nil {
 		t.Fatalf("get breakdowns: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestAnalyticsStoreBreakdownsLimit(t *testing.T) {
 	}
 
 	// limit <= 0 returns every distinct value
-	all, err := s.GetBreakdowns(ctx, "localhost", "abc", "referrer", day, day, 0)
+	all, err := s.GetBreakdowns(ctx, "abc", "referrer", day, day, 0)
 	if err != nil {
 		t.Fatalf("get breakdowns all: %v", err)
 	}
@@ -94,12 +94,12 @@ func TestAnalyticsStoreBreakdownsLimit(t *testing.T) {
 		t.Fatalf("all len = %d, want 12", len(all))
 	}
 
-	// scoped to the hostname/code: another link's breakdowns don't leak in
+	// scoped to the code: another link's breakdowns don't leak in
 	_ = db.Create(&domain.Breakdown{
-		Hostname: "localhost", Code: "other", Day: day, Dimension: "referrer",
+		Code: "other", Day: day, Dimension: "referrer",
 		Value: "other.example", Count: 100,
 	}).Error
-	scoped, err := s.GetBreakdowns(ctx, "localhost", "abc", "referrer", day, day, 0)
+	scoped, err := s.GetBreakdowns(ctx, "abc", "referrer", day, day, 0)
 	if err != nil || len(scoped) != 12 {
 		t.Fatalf("scoped len = %d, %v (want 12)", len(scoped), err)
 	}

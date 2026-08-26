@@ -242,13 +242,6 @@ func warm(ctx context.Context, st *store.LinkStore, ca *cache.LinkCache) {
 	log.Printf("cache warmed with %d active links", n)
 }
 
-func (s *server) hostname(r *http.Request) string {
-	if h := r.URL.Query().Get("hostname"); h != "" {
-		return h
-	}
-	return s.cfg.defaultHostname
-}
-
 // writeServiceError maps a LinkService error to an HTTP response.
 func (s *server) writeServiceError(w http.ResponseWriter, err error) {
 	var ve *service.ValidationError
@@ -295,7 +288,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
-	l, err := s.linkSvc.GetLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"))
+	l, err := s.linkSvc.GetLink(r.Context(), currentUser(r), r.PathValue("code"))
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -304,7 +297,7 @@ func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
-	links, err := s.linkSvc.ListLinks(r.Context(), s.hostname(r), currentUser(r).ID)
+	links, err := s.linkSvc.ListLinks(r.Context(), currentUser(r).ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
@@ -326,7 +319,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	l, err := s.linkSvc.UpdateLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"), service.UpdateLinkInput{
+	l, err := s.linkSvc.UpdateLink(r.Context(), currentUser(r), r.PathValue("code"), service.UpdateLinkInput{
 		Destination: req.Destination,
 		Remark:      req.Remark,
 		ForwardUTM:  req.ForwardUTM,
@@ -339,7 +332,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
-	l, err := s.linkSvc.SetDisabled(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"), disabled)
+	l, err := s.linkSvc.SetDisabled(r.Context(), currentUser(r), r.PathValue("code"), disabled)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -356,7 +349,7 @@ func (s *server) enableLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteLink(w http.ResponseWriter, r *http.Request) {
-	if err := s.linkSvc.DeleteLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code")); err != nil {
+	if err := s.linkSvc.DeleteLink(r.Context(), currentUser(r), r.PathValue("code")); err != nil {
 		s.writeServiceError(w, err)
 		return
 	}

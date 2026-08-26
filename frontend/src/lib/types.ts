@@ -68,7 +68,6 @@ export interface Settings {
 }
 
 export interface AnalyticsResponse {
-	hostname: string;
 	code: string;
 	window_days: number;
 	lifetime: { visits: number };
@@ -76,7 +75,6 @@ export interface AnalyticsResponse {
 }
 
 export interface TimeseriesRow {
-	hostname: string;
 	code: string;
 	day: string;
 	visits: number;

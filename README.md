@@ -5,7 +5,7 @@
    ╚════██║██╔══██║██╔══██╗██║         ██║██║   ██║
    ███████║██║  ██║██║  ██║███████╗ ██ ██║╚██████╔╝
    ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚╝ ╚═╝  ╚═════╝
-   https://www.shrl.io   
+   https://shrl.io   
 ```
 
 <div align="center">
@@ -52,11 +52,13 @@ teams and individuals who want full control over their link data.
 ### Link management
 
 - **Auto codes**: shrl.io generates every **Code**: lowercase, from an
-  unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code. The
-  exact **Code Length** defaults to 6; an Admin can set it per instance
-  (4–12) in Settings.
+  unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code. A Code
+  is globally unique across every Hostname. The exact **Code Length** defaults
+  to 6; an Admin can set it per instance (4–12) in Settings.
 - **Admin-managed hostnames**: an **Admin** registers **Hostnames**; Users
-  select from the registry when creating a Link. A Code is unique per Hostname.
+  select from the registry when creating a Link. A Hostname labels where a Link
+  lives and is shown alongside the Code (`hostname/code`) when displaying
+  Links, but it is not part of a Link's identity — a Code alone identifies it.
 - **Remark**: an optional note on a Link so you can remember what it does;
   editable after creation.
 - **QR codes**: every Link's detail page shows a QR code for its short URL,
@@ -102,7 +104,7 @@ teams and individuals who want full control over their link data.
 - **Admin password reset**: an Admin resets a forgotten password to a
   generated temporary one (shown once); the User must change it on their next
   sign-in before using the instance. There is no SMTP-based reset.
-- **Link management**: each User sees and manages only their own Links, per
+- **Link management**: each User sees and manages their own Links, across every
   Hostname: create, edit the Destination, disable/enable, and delete.
 - **Analytics view**: lifetime and window totals, a daily visits chart, and
   top-N breakdowns with a dimension picker.
@@ -117,7 +119,7 @@ teams and individuals who want full control over their link data.
   **Invite Codes** and share them out of band; a User joins a Team by entering
   the code. Only an Admin adds members directly (by username).
 - **Team dashboard**: each Team page lists members, invite codes (for owners),
-  and the Team's Links with a hostname filter; Team Links have their own detail
+  and the Team's Links (labeled `hostname/code`); Team Links have their own detail
   page with analytics.
 
 ### Settings (admin)
@@ -252,11 +254,11 @@ auto-registered on first run), or pass a `hostname` field to target another.
 
 ### Analytics (the worker aggregates visits from the Redis stream)
 
-    curl -s "http://localhost:8083/v1/links/{code}/analytics?hostname=localhost" \
+    curl -s "http://localhost:8083/v1/links/{code}/analytics" \
       -H "Authorization: Bearer <your-api-key>"
-    curl -s "http://localhost:8083/v1/links/{code}/analytics/timeseries?hostname=localhost" \
+    curl -s "http://localhost:8083/v1/links/{code}/analytics/timeseries" \
       -H "Authorization: Bearer <your-api-key>"
-    curl -s "http://localhost:8083/v1/links/{code}/analytics/breakdowns?hostname=localhost&dimension=referrer" \
+    curl -s "http://localhost:8083/v1/links/{code}/analytics/breakdowns?dimension=referrer" \
       -H "Authorization: Bearer <your-api-key>"
 
 Dimensions: `referrer`, `device`, `os`, `browser`, `country`, `region`,
@@ -299,7 +301,7 @@ All services are configured via environment variables.
 | `SHRL_REDIRECTOR_ADDR`  | `:8080`                                              | redirector    | Redirector listen address                        |
 | `SHRL_REDIRECTOR_RATE_LIMIT_IP` | `600`                                          | redirector    | Per-IP redirects per minute; `0` disables        |
 | `SHRL_REDIRECTOR_RATE_LIMIT_LINK` | `3000`                                       | redirector    | Per-Link redirects per minute; `0` disables      |
-| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, auth, frontend | Hostname auto-registered on first run; used when a request specifies none |
+| `SHRL_DEFAULT_HOSTNAME` | `localhost`                                          | api, auth, frontend | Hostname auto-registered on first run and pre-selected when creating a Link |
 | `SHRL_CODE_LENGTH`      | `6`                                                  | api           | Seed for the per-instance Code Length setting (4–12) |
 | `SHRL_RETENTION_DAYS`   | `365`                                                | api, auth, worker | Analytics retention window (daily rollups)    |
 | `SHRL_GEOLITE_LICENSE`  | *(unset)*                                            | worker        | MaxMind license key; enables GeoIP attribution   |
@@ -336,13 +338,15 @@ Joining or leaving a Team never moves existing Personal Links.
 
 Query parameters:
 
-- `hostname` (all endpoints) — defaults to `SHRL_DEFAULT_HOSTNAME`; must be a
-  registered Hostname.
 - `from` / `to` (analytics reads) — `YYYY-MM-DD` bounds; default to the
   retention window.
 - `dimension` (breakdowns) — one of the analytics dimensions, default
   `referrer`.
 - `limit` (breakdowns) — top-N, default `10`; `0` returns all values.
+
+The `hostname` query parameter was removed from every read/manage endpoint:
+a Code is globally unique, so Links are identified by Code alone. `hostname`
+is still required in the create request body (the target domain).
 
 ### Auth API (public, API keys)
 
@@ -356,7 +360,7 @@ excess requests get `429` with a `Retry-After` header.
 | Method | Path                                   | Purpose                                             |
 |--------|----------------------------------------|-----------------------------------------------------|
 | POST   | `/v1/links`                            | Create a Personal Link                              |
-| GET    | `/v1/links`                            | List the caller's Personal Links for a Hostname    |
+| GET    | `/v1/links`                            | List the caller's Personal Links (across every Hostname) |
 | GET    | `/v1/hostnames`                        | List registered Hostnames                           |
 | GET    | `/v1/links/{code}`                     | Get a Link (Personal or Team)                       |
 | PATCH  | `/v1/links/{code}`                     | Update a Link's Destination, Remark, Forward UTM   |

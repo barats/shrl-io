@@ -52,15 +52,15 @@ func (c *AnalyticsCache) RecordVisit(ctx context.Context, hostname, code, ip, us
 	return err
 }
 
-func uvKey(hostname, code string, day time.Time) string {
-	return uvKeyPrefix + hostname + ":" + code + ":" + day.Format("2006-01-02")
+func uvKey(code string, day time.Time) string {
+	return uvKeyPrefix + code + ":" + day.Format("2006-01-02")
 }
 
 // AddUniqueVisitor records a hashed visitor identity for a link on a day and
 // reports whether it is new (the SADD returned 1). The per-day set persists
 // for 48h so dedup works across worker batches.
-func (c *AnalyticsCache) AddUniqueVisitor(ctx context.Context, hostname, code string, day time.Time, hash string) (bool, error) {
-	key := uvKey(hostname, code, day)
+func (c *AnalyticsCache) AddUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) (bool, error) {
+	key := uvKey(code, day)
 	added, err := c.rdb.SAdd(ctx, key, hash).Result()
 	if err != nil {
 		return false, err
@@ -73,8 +73,8 @@ func (c *AnalyticsCache) AddUniqueVisitor(ctx context.Context, hostname, code st
 
 // RemoveUniqueVisitor undoes a dedup addition after a failed DB apply, so a
 // redelivered batch counts the visitor as new again.
-func (c *AnalyticsCache) RemoveUniqueVisitor(ctx context.Context, hostname, code string, day time.Time, hash string) error {
-	return c.rdb.SRem(ctx, uvKey(hostname, code, day), hash).Err()
+func (c *AnalyticsCache) RemoveUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) error {
+	return c.rdb.SRem(ctx, uvKey(code, day), hash).Err()
 }
 
 // EnsureVisitGroup creates the visits consumer group from the stream start so

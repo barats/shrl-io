@@ -22,8 +22,8 @@ type fakeCache struct {
 	seen map[string]bool
 }
 
-func (f *fakeCache) AddUniqueVisitor(_ context.Context, hostname, code string, day time.Time, hash string) (bool, error) {
-	key := hostname + "|" + code + "|" + day.Format("2006-01-02") + "|" + hash
+func (f *fakeCache) AddUniqueVisitor(_ context.Context, code string, day time.Time, hash string) (bool, error) {
+	key := code + "|" + day.Format("2006-01-02") + "|" + hash
 	if f.seen == nil {
 		f.seen = map[string]bool{}
 	}
@@ -34,8 +34,8 @@ func (f *fakeCache) AddUniqueVisitor(_ context.Context, hostname, code string, d
 	return true, nil
 }
 
-func (f *fakeCache) RemoveUniqueVisitor(_ context.Context, hostname, code string, day time.Time, hash string) error {
-	key := hostname + "|" + code + "|" + day.Format("2006-01-02") + "|" + hash
+func (f *fakeCache) RemoveUniqueVisitor(_ context.Context, code string, day time.Time, hash string) error {
+	key := code + "|" + day.Format("2006-01-02") + "|" + hash
 	delete(f.seen, key)
 	return nil
 }

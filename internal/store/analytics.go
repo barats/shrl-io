@@ -19,6 +19,16 @@ type AnalyticsStore struct {
 func NewAnalyticsStore(db *gorm.DB) *AnalyticsStore { return &AnalyticsStore{db: db} }
 
 func (s *AnalyticsStore) Migrate(ctx context.Context) error {
+	// ADR 0019: rollups are keyed by Code alone; the legacy (Hostname, Code)
+	// keys cannot be altered in place by GORM, and existing data was cleared
+	// by decision, so tables still carrying the composite key are rebuilt.
+	for _, dst := range []any{&domain.DailyStats{}, &domain.Breakdown{}, &domain.LifetimeStats{}} {
+		if s.db.WithContext(ctx).Migrator().HasTable(dst) && hasCompositeAnalyticsKey(s.db, dst) {
+			if err := s.db.WithContext(ctx).Migrator().DropTable(dst); err != nil {
+				return err
+			}
+		}
+	}
 	return s.db.WithContext(ctx).AutoMigrate(
 		&domain.DailyStats{},
 		&domain.Breakdown{},
@@ -26,24 +36,38 @@ func (s *AnalyticsStore) Migrate(ctx context.Context) error {
 	)
 }
 
+// hasCompositeAnalyticsKey reports whether an analytics table still uses the
+// legacy (Hostname, Code, ...) primary key, i.e. more than one column is a
+// primary key.
+func hasCompositeAnalyticsKey(db *gorm.DB, dst any) bool {
+	cols, err := db.Migrator().ColumnTypes(dst)
+	if err != nil {
+		return false
+	}
+	keys := 0
+	for _, c := range cols {
+		if pk, ok := c.PrimaryKey(); ok && pk {
+			keys++
+		}
+	}
+	return keys > 1
+}
+
 // DailyIncrement, LifetimeIncrement, and BreakdownIncrement are the deltas a
 // worker batch applies atomically in one transaction.
 type DailyIncrement struct {
-	Hostname string
-	Code     string
-	Day      time.Time
-	Visits   int64
-	Uniques  int64
+	Code    string
+	Day     time.Time
+	Visits  int64
+	Uniques int64
 }
 
 type LifetimeIncrement struct {
-	Hostname string
-	Code     string
-	Visits   int64
+	Code   string
+	Visits int64
 }
 
 type BreakdownIncrement struct {
-	Hostname  string
 	Code      string
 	Day       time.Time
 	Dimension string
@@ -84,7 +108,7 @@ func (s *AnalyticsStore) ApplyAnalytics(ctx context.Context, dailies []DailyIncr
 
 func upsertDaily(tx *gorm.DB, d DailyIncrement) error {
 	return tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "hostname"}, {Name: "code"}, {Name: "day"}},
+		Columns: []clause.Column{{Name: "code"}, {Name: "day"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			// Table-qualified: an unqualified column here is ambiguous in
 			// Postgres ON CONFLICT when the name is also in the INSERT list.
@@ -93,39 +117,39 @@ func upsertDaily(tx *gorm.DB, d DailyIncrement) error {
 			"updated_at":      time.Now(),
 		}),
 	}).Create(&domain.DailyStats{
-		Hostname: d.Hostname, Code: d.Code, Day: d.Day,
+		Code: d.Code, Day: d.Day,
 		Visits: d.Visits, UniqueVisitors: d.Uniques,
 	}).Error
 }
 
 func upsertLifetime(tx *gorm.DB, l LifetimeIncrement) error {
 	return tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "hostname"}, {Name: "code"}},
+		Columns: []clause.Column{{Name: "code"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"total_visits": gorm.Expr(`"lifetime_stats"."total_visits" + ?`, l.Visits),
 			"updated_at":   time.Now(),
 		}),
 	}).Create(&domain.LifetimeStats{
-		Hostname: l.Hostname, Code: l.Code, TotalVisits: l.Visits,
+		Code: l.Code, TotalVisits: l.Visits,
 	}).Error
 }
 
 func upsertBreakdown(tx *gorm.DB, b BreakdownIncrement) error {
 	return tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "hostname"}, {Name: "code"}, {Name: "day"}, {Name: "dimension"}, {Name: "value"}},
+		Columns: []clause.Column{{Name: "code"}, {Name: "day"}, {Name: "dimension"}, {Name: "value"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"count": gorm.Expr(`"breakdowns"."count" + ?`, b.Count),
 		}),
 	}).Create(&domain.Breakdown{
-		Hostname: b.Hostname, Code: b.Code, Day: b.Day,
+		Code: b.Code, Day: b.Day,
 		Dimension: b.Dimension, Value: b.Value, Count: b.Count,
 	}).Error
 }
 
 // GetLifetime returns the permanent per-link total.
-func (s *AnalyticsStore) GetLifetime(ctx context.Context, hostname, code string) (*domain.LifetimeStats, error) {
+func (s *AnalyticsStore) GetLifetime(ctx context.Context, code string) (*domain.LifetimeStats, error) {
 	var l domain.LifetimeStats
-	err := s.db.WithContext(ctx).Where("hostname = ? AND code = ?", hostname, code).First(&l).Error
+	err := s.db.WithContext(ctx).Where("code = ?", code).First(&l).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -136,34 +160,34 @@ func (s *AnalyticsStore) GetLifetime(ctx context.Context, hostname, code string)
 }
 
 // SumDailyStats returns visits and unique visitors for a link within a window.
-func (s *AnalyticsStore) SumDailyStats(ctx context.Context, hostname, code string, from, to time.Time) (visits, uniques int64, err error) {
+func (s *AnalyticsStore) SumDailyStats(ctx context.Context, code string, from, to time.Time) (visits, uniques int64, err error) {
 	var row struct {
 		Visits  int64
 		Uniques int64
 	}
 	err = s.db.WithContext(ctx).Model(&domain.DailyStats{}).
 		Select("COALESCE(SUM(visits), 0) AS visits, COALESCE(SUM(unique_visitors), 0) AS uniques").
-		Where("hostname = ? AND code = ? AND day >= ? AND day <= ?", hostname, code, from, to).
+		Where("code = ? AND day >= ? AND day <= ?", code, from, to).
 		Scan(&row).Error
 	return row.Visits, row.Uniques, err
 }
 
 // GetTimeseries returns daily buckets for a link within a window, ascending.
-func (s *AnalyticsStore) GetTimeseries(ctx context.Context, hostname, code string, from, to time.Time) ([]domain.DailyStats, error) {
+func (s *AnalyticsStore) GetTimeseries(ctx context.Context, code string, from, to time.Time) ([]domain.DailyStats, error) {
 	var rows []domain.DailyStats
 	err := s.db.WithContext(ctx).
-		Where("hostname = ? AND code = ? AND day >= ? AND day <= ?", hostname, code, from, to).
+		Where("code = ? AND day >= ? AND day <= ?", code, from, to).
 		Order("day ASC").Find(&rows).Error
 	return rows, err
 }
 
 // GetBreakdowns returns the top-N dimension values by count within a window.
 // A limit <= 0 returns every distinct value.
-func (s *AnalyticsStore) GetBreakdowns(ctx context.Context, hostname, code, dimension string, from, to time.Time, limit int) ([]BreakdownTotal, error) {
+func (s *AnalyticsStore) GetBreakdowns(ctx context.Context, code, dimension string, from, to time.Time, limit int) ([]BreakdownTotal, error) {
 	var totals []BreakdownTotal
 	q := s.db.WithContext(ctx).Model(&domain.Breakdown{}).
 		Select("value, SUM(count) AS total").
-		Where("hostname = ? AND code = ? AND dimension = ? AND day >= ? AND day <= ?", hostname, code, dimension, from, to).
+		Where("code = ? AND dimension = ? AND day >= ? AND day <= ?", code, dimension, from, to).
 		Group("value").Order("total DESC")
 	if limit > 0 {
 		q = q.Limit(limit)

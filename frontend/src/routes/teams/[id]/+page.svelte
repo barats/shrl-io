@@ -52,7 +52,6 @@
 	let error = $state('');
 
 	let hostnames = $state<string[]>([]);
-	let selectedHostname = $state('');
 	let teamLinks = $state<Link[]>([]);
 	let linksLoading = $state(true);
 	let linksError = $state('');
@@ -86,7 +85,6 @@
 			team = t;
 			me = u;
 			hostnames = [...new Set([cfg.defaultHostname, ...hs])].sort();
-			selectedHostname = cfg.defaultHostname;
 			createHostname = cfg.defaultHostname;
 			await Promise.all([loadLinks(), loadInvites()]);
 		} catch (e) {
@@ -100,19 +98,12 @@
 		linksLoading = true;
 		linksError = '';
 		try {
-			teamLinks = await api.listTeamLinks(teamId, selectedHostname);
+			teamLinks = await api.listTeamLinks(teamId);
 		} catch (e) {
 			linksError = (e as Error).message;
 		} finally {
 			linksLoading = false;
 		}
-	}
-
-	async function onHostnameChange(value: string | undefined) {
-		if (value === undefined) return;
-		selectedHostname = value;
-		createHostname = value;
-		await loadLinks();
 	}
 
 	async function loadInvites() {
@@ -418,20 +409,8 @@
 
 		<div class="space-y-6">
 			<Card>
-				<CardHeader class="flex-row items-center justify-between space-y-0">
+				<CardHeader>
 					<CardTitle>Team Links</CardTitle>
-					<div class="w-56">
-						<Select type="single" bind:value={selectedHostname} onValueChange={onHostnameChange}>
-							<SelectTrigger class="w-full">
-								<span data-slot="select-value">{selectedHostname || 'Hostname'}</span>
-							</SelectTrigger>
-							<SelectContent>
-								{#each hostnames as host (host)}
-									<SelectItem value={host} label={host} />
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
 				</CardHeader>
 				<CardContent>
 					{#if linksError}
@@ -447,28 +426,28 @@
 						</div>
 					{:else if teamLinks.length === 0}
 						<p class="py-8 text-center text-sm text-muted-foreground">
-							No Links on <span class="font-medium">{selectedHostname}</span> yet. Create one below.
+							No Links yet. Create one below.
 						</p>
 					{:else}
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Code</TableHead>
+									<TableHead>Link</TableHead>
 									<TableHead>Destination</TableHead>
 									<TableHead class="w-24">Status</TableHead>
 									<TableHead class="w-36">Created</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{#each teamLinks as link (link.hostname + link.code)}
+								{#each teamLinks as link (link.code)}
 									<TableRow>
 										<TableCell class="font-medium">
 											<a
-												href={`/teams/${teamId}/links/${encodeURIComponent(link.code)}?hostname=${encodeURIComponent(link.hostname)}`}
+												href={`/teams/${teamId}/links/${encodeURIComponent(link.code)}`}
 												class="inline-flex items-center gap-1.5 text-primary hover:underline"
 											>
 												<Link2 class="size-3.5" />
-												{link.code}
+												{link.hostname}/{link.code}
 											</a>
 										</TableCell>
 										<TableCell class="max-w-72 truncate text-muted-foreground">

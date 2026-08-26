@@ -5,7 +5,6 @@ import "time"
 // DailyStats is the pre-aggregated per-link, per-day rollup written by the
 // worker and read by the analytics API.
 type DailyStats struct {
-	Hostname       string    `json:"hostname" gorm:"primaryKey"`
 	Code           string    `json:"code" gorm:"primaryKey"`
 	Day            time.Time `json:"day" gorm:"primaryKey;type:date"`
 	Visits         int64     `json:"visits"`
@@ -16,7 +15,6 @@ type DailyStats struct {
 // Breakdown is one dimension value per link per day (referrer, device, os,
 // browser). Rows are pruned with the retention window.
 type Breakdown struct {
-	Hostname  string    `json:"hostname" gorm:"primaryKey"`
 	Code      string    `json:"code" gorm:"primaryKey"`
 	Day       time.Time `json:"day" gorm:"primaryKey;type:date"`
 	Dimension string    `json:"dimension" gorm:"primaryKey"`
@@ -27,7 +25,6 @@ type Breakdown struct {
 // LifetimeStats is the per-link total that survives pruning, so the "total
 // visits" headline stays accurate for the life of a link.
 type LifetimeStats struct {
-	Hostname    string    `json:"hostname" gorm:"primaryKey"`
 	Code        string    `json:"code" gorm:"primaryKey"`
 	TotalVisits int64     `json:"total_visits"`
 	UpdatedAt   time.Time `json:"updated_at"`

@@ -161,7 +161,7 @@ func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
 	if !s.requireTeamRead(w, r, t.ID) {
 		return
 	}
-	links, err := s.linkSvc.ListTeamLinks(r.Context(), s.hostname(r), t.ID)
+	links, err := s.linkSvc.ListTeamLinks(r.Context(), t.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return

@@ -100,10 +100,10 @@ func TestPersonalLinkAccessAndCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.GetLink(ctx, alice, l.Hostname, l.Code); err != nil {
+	if _, err := svc.GetLink(ctx, alice, l.Code); err != nil {
 		t.Fatalf("alice get: %v", err)
 	}
-	upd, err := svc.UpdateLink(ctx, alice, l.Hostname, l.Code, UpdateLinkInput{Destination: "https://new.example.com"})
+	upd, err := svc.UpdateLink(ctx, alice, l.Code, UpdateLinkInput{Destination: "https://new.example.com"})
 	if err != nil {
 		t.Fatalf("alice update: %v", err)
 	}
@@ -115,15 +115,15 @@ func TestPersonalLinkAccessAndCache(t *testing.T) {
 	}
 
 	// bob is an outsider: existence is not leaked
-	if _, err := svc.GetLink(ctx, bob, l.Hostname, l.Code); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.GetLink(ctx, bob, l.Code); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob get err = %v, want ErrNotFound", err)
 	}
-	if _, err := svc.UpdateLink(ctx, bob, l.Hostname, l.Code, UpdateLinkInput{Destination: "https://evil.example.com"}); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.UpdateLink(ctx, bob, l.Code, UpdateLinkInput{Destination: "https://evil.example.com"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob update err = %v, want ErrNotFound", err)
 	}
 
 	// disabling evicts the redirect cache
-	if _, err := svc.SetDisabled(ctx, alice, l.Hostname, l.Code, true); err != nil {
+	if _, err := svc.SetDisabled(ctx, alice, l.Code, true); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
 	if _, ok, err := lc.Get(ctx, l.Hostname, l.Code); err != nil || ok {
@@ -131,10 +131,10 @@ func TestPersonalLinkAccessAndCache(t *testing.T) {
 	}
 
 	// deleting removes it from the store and cache
-	if err := svc.DeleteLink(ctx, alice, l.Hostname, l.Code); err != nil {
+	if err := svc.DeleteLink(ctx, alice, l.Code); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := svc.GetLink(ctx, alice, l.Hostname, l.Code); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.GetLink(ctx, alice, l.Code); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get after delete err = %v, want ErrNotFound", err)
 	}
 }
@@ -167,23 +167,23 @@ func TestTeamLinkPermissions(t *testing.T) {
 	}
 
 	// bob (member) and carol (admin) can read
-	if _, err := svc.GetLink(ctx, bob, l.Hostname, l.Code); err != nil {
+	if _, err := svc.GetLink(ctx, bob, l.Code); err != nil {
 		t.Fatalf("member get team link: %v", err)
 	}
-	if _, err := svc.GetLink(ctx, carol, l.Hostname, l.Code); err != nil {
+	if _, err := svc.GetLink(ctx, carol, l.Code); err != nil {
 		t.Fatalf("admin get team link: %v", err)
 	}
 	// a non-member gets ErrNotFound
-	if _, err := svc.GetLink(ctx, &domain.User{ID: 99}, l.Hostname, l.Code); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.GetLink(ctx, &domain.User{ID: 99}, l.Code); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("outsider get err = %v, want ErrNotFound", err)
 	}
 
 	// bob is a member but neither owner nor creator: read-only
-	if _, err := svc.UpdateLink(ctx, bob, l.Hostname, l.Code, UpdateLinkInput{Destination: "https://x.example.com"}); !errors.Is(err, ErrForbidden) {
+	if _, err := svc.UpdateLink(ctx, bob, l.Code, UpdateLinkInput{Destination: "https://x.example.com"}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("member update err = %v, want ErrForbidden", err)
 	}
 	// alice the owner can manage
-	if _, err := svc.UpdateLink(ctx, alice, l.Hostname, l.Code, UpdateLinkInput{Destination: "https://new.example.com"}); err != nil {
+	if _, err := svc.UpdateLink(ctx, alice, l.Code, UpdateLinkInput{Destination: "https://new.example.com"}); err != nil {
 		t.Fatalf("owner update: %v", err)
 	}
 
@@ -217,13 +217,13 @@ func TestAnalyticsRequiresReadAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	from, to := svc.AnalyticsWindow("", "", time.Now().UTC())
-	if _, err := svc.GetAnalytics(ctx, alice, l.Hostname, l.Code, from, to); err != nil {
+	if _, err := svc.GetAnalytics(ctx, alice, l.Code, from, to); err != nil {
 		t.Fatalf("alice analytics: %v", err)
 	}
-	if _, err := svc.GetAnalytics(ctx, bob, l.Hostname, l.Code, from, to); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.GetAnalytics(ctx, bob, l.Code, from, to); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob analytics err = %v, want ErrNotFound", err)
 	}
-	if _, err := svc.GetBreakdowns(ctx, alice, l.Hostname, l.Code, "bogus", from, to, 10); err == nil {
+	if _, err := svc.GetBreakdowns(ctx, alice, l.Code, "bogus", from, to, 10); err == nil {
 		t.Fatal("bad dimension should be a validation error")
 	}
 }

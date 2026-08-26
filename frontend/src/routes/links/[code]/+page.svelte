@@ -40,7 +40,7 @@
 	let loading = $state(true);
 	let error = $state('');
 
-	const hostname = $derived(page.url.searchParams.get('hostname') ?? '');
+	const hostname = $derived(link?.hostname ?? '');
 	const code = $derived(page.params.code as string);
 
 	let editDestination = $state('');
@@ -63,7 +63,7 @@
 		loading = true;
 		error = '';
 		try {
-			link = await api.getLink(code, hostname);
+			link = await api.getLink(code);
 			editDestination = link.destination;
 			editRemark = link.remark ?? '';
 			editForwardUTM = link.forward_utm;
@@ -82,9 +82,9 @@
 		try {
 			const from = daysAgo(30);
 			[analytics, timeseries, breakdowns] = await Promise.all([
-				api.getAnalytics(code, hostname),
-				api.getTimeseries(code, hostname, from),
-				api.getBreakdowns(code, hostname, dimension)
+				api.getAnalytics(code),
+				api.getTimeseries(code, from),
+				api.getBreakdowns(code, dimension)
 			]);
 		} catch (e) {
 			analyticsError = (e as Error).message;
@@ -104,7 +104,7 @@
 		saveError = '';
 		saved = false;
 		try {
-			link = await api.updateLink(code, hostname, editDestination, editRemark, editForwardUTM);
+			link = await api.updateLink(code, editDestination, editRemark, editForwardUTM);
 			saved = true;
 		} catch (e) {
 			saveError = (e as Error).message;
@@ -116,7 +116,7 @@
 	async function toggleDisabled() {
 		if (!link) return;
 		try {
-			link = await api.setDisabled(code, hostname, !link.disabled);
+			link = await api.setDisabled(code, !link.disabled);
 		} catch (e) {
 			error = (e as Error).message;
 		}
@@ -124,10 +124,10 @@
 
 	async function remove() {
 		if (!link) return;
-		if (!window.confirm(`Delete ${hostname}/${code}? This cannot be undone.`)) return;
+		if (!window.confirm(`Delete ${link.hostname}/${code}? This cannot be undone.`)) return;
 		try {
-			await api.deleteLink(code, hostname);
-			await goto(`/?hostname=${encodeURIComponent(hostname)}`);
+			await api.deleteLink(code);
+			await goto('/');
 		} catch (e) {
 			error = (e as Error).message;
 		}

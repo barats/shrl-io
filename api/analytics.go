@@ -7,16 +7,14 @@ import (
 )
 
 func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
 	code := r.PathValue("code")
 	from, to := s.linkSvc.AnalyticsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	a, err := s.linkSvc.GetAnalytics(r.Context(), currentUser(r), hostname, code, from, to)
+	a, err := s.linkSvc.GetAnalytics(r.Context(), currentUser(r), code, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"hostname":    a.Hostname,
 		"code":        a.Code,
 		"window_days": a.RetentionDays,
 		"lifetime":    map[string]int64{"visits": a.LifetimeVisits},
@@ -25,10 +23,9 @@ func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
 	code := r.PathValue("code")
 	from, to := s.linkSvc.AnalyticsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	rows, err := s.linkSvc.GetTimeseries(r.Context(), currentUser(r), hostname, code, from, to)
+	rows, err := s.linkSvc.GetTimeseries(r.Context(), currentUser(r), code, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -37,7 +34,6 @@ func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
 	code := r.PathValue("code")
 	dimension := r.URL.Query().Get("dimension")
 	if dimension == "" {
@@ -53,7 +49,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	b, err := s.linkSvc.GetBreakdowns(r.Context(), currentUser(r), hostname, code, dimension, from, to, limit)
+	b, err := s.linkSvc.GetBreakdowns(r.Context(), currentUser(r), code, dimension, from, to, limit)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return

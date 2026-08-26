@@ -198,13 +198,6 @@ func (s *server) guard(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) hostname(r *http.Request) string {
-	if h := r.URL.Query().Get("hostname"); h != "" {
-		return h
-	}
-	return s.cfg.defaultHostname
-}
-
 func (s *server) writeServiceError(w http.ResponseWriter, err error) {
 	var ve *service.ValidationError
 	switch {
@@ -248,7 +241,7 @@ func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
-	links, err := s.svc.ListLinks(r.Context(), s.hostname(r), currentUser(r).ID)
+	links, err := s.svc.ListLinks(r.Context(), currentUser(r).ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
@@ -260,7 +253,7 @@ func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
-	l, err := s.svc.GetLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"))
+	l, err := s.svc.GetLink(r.Context(), currentUser(r), r.PathValue("code"))
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -278,7 +271,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	l, err := s.svc.UpdateLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"), service.UpdateLinkInput{
+	l, err := s.svc.UpdateLink(r.Context(), currentUser(r), r.PathValue("code"), service.UpdateLinkInput{
 		Destination: req.Destination,
 		Remark:      req.Remark,
 		ForwardUTM:  req.ForwardUTM,
@@ -291,7 +284,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
-	l, err := s.svc.SetDisabled(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"), disabled)
+	l, err := s.svc.SetDisabled(r.Context(), currentUser(r), r.PathValue("code"), disabled)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -363,7 +356,7 @@ func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load team")
 		return
 	}
-	links, err := s.svc.ListTeamLinks(r.Context(), s.hostname(r), id)
+	links, err := s.svc.ListTeamLinks(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
@@ -397,16 +390,14 @@ func (s *server) listHostnames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
 	code := r.PathValue("code")
 	from, to := s.svc.AnalyticsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	a, err := s.svc.GetAnalytics(r.Context(), currentUser(r), hostname, code, from, to)
+	a, err := s.svc.GetAnalytics(r.Context(), currentUser(r), code, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"hostname":    a.Hostname,
 		"code":        a.Code,
 		"window_days": a.RetentionDays,
 		"lifetime":    map[string]int64{"visits": a.LifetimeVisits},
@@ -415,10 +406,9 @@ func (s *server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
 	code := r.PathValue("code")
 	from, to := s.svc.AnalyticsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	rows, err := s.svc.GetTimeseries(r.Context(), currentUser(r), hostname, code, from, to)
+	rows, err := s.svc.GetTimeseries(r.Context(), currentUser(r), code, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -427,7 +417,6 @@ func (s *server) getAnalyticsTimeseries(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
 	code := r.PathValue("code")
 	dimension := r.URL.Query().Get("dimension")
 	if dimension == "" {
@@ -443,7 +432,7 @@ func (s *server) getAnalyticsBreakdowns(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	b, err := s.svc.GetBreakdowns(r.Context(), currentUser(r), hostname, code, dimension, from, to, limit)
+	b, err := s.svc.GetBreakdowns(r.Context(), currentUser(r), code, dimension, from, to, limit)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return

@@ -65,9 +65,8 @@ export const api = {
 		return req(`hostnames/${encodeURIComponent(name)}`, { method: 'DELETE' });
 	},
 
-	async listLinks(hostname?: string): Promise<Link[]> {
-		const q = hostname ? `?hostname=${encodeURIComponent(hostname)}` : '';
-		return req<Link[]>('links' + q);
+	async listLinks(): Promise<Link[]> {
+		return req<Link[]>('links');
 	},
 
 	async createLink(input: CreateLinkInput): Promise<Link> {
@@ -78,19 +77,18 @@ export const api = {
 		});
 	},
 
-	async getLink(code: string, hostname: string): Promise<Link> {
-		return req<Link>(`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`);
+	async getLink(code: string): Promise<Link> {
+		return req<Link>(`links/${encodeURIComponent(code)}`);
 	},
 
 	async updateLink(
 		code: string,
-		hostname: string,
 		destination: string,
 		remark = '',
 		forwardUtm = false
 	): Promise<Link> {
 		return req<Link>(
-			`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`,
+			`links/${encodeURIComponent(code)}`,
 			{
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
@@ -99,32 +97,27 @@ export const api = {
 		);
 	},
 
-	async setDisabled(code: string, hostname: string, disabled: boolean): Promise<Link> {
+	async setDisabled(code: string, disabled: boolean): Promise<Link> {
 		const action = disabled ? 'disable' : 'enable';
-		return req<Link>(
-			`links/${encodeURIComponent(code)}/${action}?hostname=${encodeURIComponent(hostname)}`,
-			{ method: 'POST' }
-		);
+		return req<Link>(`links/${encodeURIComponent(code)}/${action}`, { method: 'POST' });
 	},
 
-	async deleteLink(code: string, hostname: string): Promise<void> {
-		return req<void>(`links/${encodeURIComponent(code)}?hostname=${encodeURIComponent(hostname)}`, {
+	async deleteLink(code: string): Promise<void> {
+		return req<void>(`links/${encodeURIComponent(code)}`, {
 			method: 'DELETE'
 		});
 	},
 
-	async getAnalytics(code: string, hostname: string): Promise<AnalyticsResponse> {
-		const q = new URLSearchParams({ hostname });
-		return req<AnalyticsResponse>(`links/${encodeURIComponent(code)}/analytics?${q}`);
+	async getAnalytics(code: string): Promise<AnalyticsResponse> {
+		return req<AnalyticsResponse>(`links/${encodeURIComponent(code)}/analytics`);
 	},
 
 	async getTimeseries(
 		code: string,
-		hostname: string,
 		from?: string,
 		to?: string
 	): Promise<TimeseriesRow[]> {
-		const q = new URLSearchParams({ hostname });
+		const q = new URLSearchParams();
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
 		return req<TimeseriesRow[]>(`links/${encodeURIComponent(code)}/analytics/timeseries?${q}`);
@@ -132,12 +125,11 @@ export const api = {
 
 	async getBreakdowns(
 		code: string,
-		hostname: string,
 		dimension: string,
 		from?: string,
 		to?: string
 	): Promise<BreakdownResponse> {
-		const q = new URLSearchParams({ hostname, dimension });
+		const q = new URLSearchParams({ dimension });
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
 		return req<BreakdownResponse>(`links/${encodeURIComponent(code)}/analytics/breakdowns?${q}`);
@@ -198,9 +190,8 @@ export const api = {
 		return req<TeamDetail>(`teams/${id}`);
 	},
 
-	async listTeamLinks(id: number, hostname?: string): Promise<Link[]> {
-		const q = hostname ? `?hostname=${encodeURIComponent(hostname)}` : '';
-		return req<Link[]>(`teams/${id}/links${q}`);
+	async listTeamLinks(id: number): Promise<Link[]> {
+		return req<Link[]>(`teams/${id}/links`);
 	},
 
 	async createTeamLink(

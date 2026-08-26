@@ -14,8 +14,8 @@ import (
 // Cache and Store are the seams the processor needs; satisfied by
 // *cache.AnalyticsCache and *store.AnalyticsStore, faked in tests.
 type Cache interface {
-	AddUniqueVisitor(ctx context.Context, hostname, code string, day time.Time, hash string) (bool, error)
-	RemoveUniqueVisitor(ctx context.Context, hostname, code string, day time.Time, hash string) error
+	AddUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) (bool, error)
+	RemoveUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) error
 }
 
 type Store interface {
@@ -47,19 +47,16 @@ func (p *Processor) now() time.Time {
 }
 
 type dayLink struct {
-	day      time.Time
-	hostname string
-	code     string
+	day  time.Time
+	code string
 }
 
 type linkKey struct {
-	hostname string
-	code     string
+	code string
 }
 
 type breakdownKey struct {
 	day       time.Time
-	hostname  string
 	code      string
 	dimension string
 	value     string
@@ -75,13 +72,12 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 	var addedHashes []visitorHash
 
 	for _, m := range msgs {
-		hostname := strVal(m.Values, "hostname")
 		code := strVal(m.Values, "code")
 		ip := strVal(m.Values, "ip")
 		ua := strVal(m.Values, "user_agent")
 		referrer := strVal(m.Values, "referrer")
 		ts := strVal(m.Values, "ts")
-		if hostname == "" || code == "" {
+		if code == "" {
 			continue
 		}
 		if domain.IsBot(ua) {
@@ -89,15 +85,15 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		day := DayOf(ts, p.now)
-		dl := dayLink{day: day, hostname: hostname, code: code}
+		dl := dayLink{day: day, code: code}
 
 		d := dailies[dl]
-		d.Hostname, d.Code, d.Day = hostname, code, day
+		d.Code, d.Day = code, day
 		d.Visits++
 		dailies[dl] = d
 
 		hash := VisitorHash(ip, ua)
-		added, err := p.Cache.AddUniqueVisitor(ctx, hostname, code, day, hash)
+		added, err := p.Cache.AddUniqueVisitor(ctx, code, day, hash)
 		if err != nil {
 			return err
 		}
@@ -105,12 +101,12 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 			d = dailies[dl]
 			d.Uniques++
 			dailies[dl] = d
-			addedHashes = append(addedHashes, visitorHash{hostname, code, day, hash})
+			addedHashes = append(addedHashes, visitorHash{code, day, hash})
 		}
 
-		lk := linkKey{hostname: hostname, code: code}
+		lk := linkKey{code: code}
 		l := lifetimes[lk]
-		l.Hostname, l.Code = hostname, code
+		l.Code = code
 		l.Visits++
 		lifetimes[lk] = l
 
@@ -125,17 +121,17 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 			"region":   region,
 			"city":     city,
 		} {
-			bk := breakdownKey{day: day, hostname: hostname, code: code, dimension: dim, value: val}
+			bk := breakdownKey{day: day, code: code, dimension: dim, value: val}
 			b := breakdowns[bk]
-			b.Hostname, b.Code, b.Day, b.Dimension, b.Value = hostname, code, day, dim, val
+			b.Code, b.Day, b.Dimension, b.Value = code, day, dim, val
 			b.Count++
 			breakdowns[bk] = b
 		}
 		for _, dim := range UTMParams {
 			val := NormalizeUTMValue(strVal(m.Values, dim))
-			bk := breakdownKey{day: day, hostname: hostname, code: code, dimension: dim, value: val}
+			bk := breakdownKey{day: day, code: code, dimension: dim, value: val}
 			b := breakdowns[bk]
-			b.Hostname, b.Code, b.Day, b.Dimension, b.Value = hostname, code, day, dim, val
+			b.Code, b.Day, b.Dimension, b.Value = code, day, dim, val
 			b.Count++
 			breakdowns[bk] = b
 		}
@@ -146,7 +142,7 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 		// visitors as new again; otherwise a failed batch would permanently
 		// lose unique counts.
 		for _, h := range addedHashes {
-			p.Cache.RemoveUniqueVisitor(ctx, h.hostname, h.code, h.day, h.hash)
+			p.Cache.RemoveUniqueVisitor(ctx, h.code, h.day, h.hash)
 		}
 		return err
 	}
@@ -154,10 +150,9 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 }
 
 type visitorHash struct {
-	hostname string
-	code     string
-	day      time.Time
-	hash     string
+	code string
+	day  time.Time
+	hash string
 }
 
 func strVal(values map[string]interface{}, key string) string {

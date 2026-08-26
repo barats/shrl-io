@@ -146,8 +146,8 @@ func (s *LinkService) CreateLink(ctx context.Context, teamID *int64, creatorID i
 }
 
 // GetLink loads a link the user may read, or ErrNotFound.
-func (s *LinkService) GetLink(ctx context.Context, u *domain.User, hostname, code string) (*domain.Link, error) {
-	l, err := s.links.Get(ctx, hostname, code)
+func (s *LinkService) GetLink(ctx context.Context, u *domain.User, code string) (*domain.Link, error) {
+	l, err := s.links.Get(ctx, code)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, ErrNotFound
 	}
@@ -163,8 +163,8 @@ func (s *LinkService) GetLink(ctx context.Context, u *domain.User, hostname, cod
 // ManageableLink loads a link the user may manage. A user who can read but
 // not manage gets ErrForbidden; a user with no access gets ErrNotFound so
 // link existence is not leaked.
-func (s *LinkService) ManageableLink(ctx context.Context, u *domain.User, hostname, code string) (*domain.Link, error) {
-	l, err := s.links.Get(ctx, hostname, code)
+func (s *LinkService) ManageableLink(ctx context.Context, u *domain.User, code string) (*domain.Link, error) {
+	l, err := s.links.Get(ctx, code)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, ErrNotFound
 	}
@@ -190,7 +190,7 @@ type UpdateLinkInput struct {
 
 // UpdateLink changes a link's destination, remark, and optional forward_utm,
 // then refreshes the redirect cache.
-func (s *LinkService) UpdateLink(ctx context.Context, u *domain.User, hostname, code string, in UpdateLinkInput) (*domain.Link, error) {
+func (s *LinkService) UpdateLink(ctx context.Context, u *domain.User, code string, in UpdateLinkInput) (*domain.Link, error) {
 	dest, err := domain.NormalizeAndValidateDestination(in.Destination)
 	if err != nil {
 		return nil, &ValidationError{Msg: err.Error()}
@@ -199,7 +199,7 @@ func (s *LinkService) UpdateLink(ctx context.Context, u *domain.User, hostname, 
 	if err != nil {
 		return nil, &ValidationError{Msg: err.Error()}
 	}
-	l, err := s.ManageableLink(ctx, u, hostname, code)
+	l, err := s.ManageableLink(ctx, u, code)
 	if err != nil {
 		return nil, err
 	}
@@ -219,8 +219,8 @@ func (s *LinkService) UpdateLink(ctx context.Context, u *domain.User, hostname, 
 
 // SetDisabled disables or enables a link, evicting or populating the redirect
 // cache so the redirector 404s or serves it.
-func (s *LinkService) SetDisabled(ctx context.Context, u *domain.User, hostname, code string, disabled bool) (*domain.Link, error) {
-	l, err := s.ManageableLink(ctx, u, hostname, code)
+func (s *LinkService) SetDisabled(ctx context.Context, u *domain.User, code string, disabled bool) (*domain.Link, error) {
+	l, err := s.ManageableLink(ctx, u, code)
 	if err != nil {
 		return nil, err
 	}
@@ -236,24 +236,26 @@ func (s *LinkService) SetDisabled(ctx context.Context, u *domain.User, hostname,
 
 // DeleteLink permanently removes a link and evicts it from the redirect
 // cache. Internal API only; the Auth API never exposes deletion.
-func (s *LinkService) DeleteLink(ctx context.Context, u *domain.User, hostname, code string) error {
-	if _, err := s.ManageableLink(ctx, u, hostname, code); err != nil {
+func (s *LinkService) DeleteLink(ctx context.Context, u *domain.User, code string) error {
+	l, err := s.ManageableLink(ctx, u, code)
+	if err != nil {
 		return err
 	}
-	if err := s.links.Delete(ctx, hostname, code); err != nil {
+	if err := s.links.Delete(ctx, code); err != nil {
 		return err
 	}
-	return s.linkCache.Delete(ctx, hostname, code)
+	return s.linkCache.Delete(ctx, l.Hostname, code)
 }
 
-// ListLinks returns the user's Personal links on a hostname, newest first.
-func (s *LinkService) ListLinks(ctx context.Context, hostname string, userID int64) ([]domain.Link, error) {
-	return s.links.List(ctx, hostname, userID)
+// ListLinks returns the user's Personal links across every hostname, newest
+// first.
+func (s *LinkService) ListLinks(ctx context.Context, userID int64) ([]domain.Link, error) {
+	return s.links.List(ctx, userID)
 }
 
-// ListTeamLinks returns a team's links on a hostname, newest first.
-func (s *LinkService) ListTeamLinks(ctx context.Context, hostname string, teamID int64) ([]domain.Link, error) {
-	return s.links.ListByTeam(ctx, hostname, teamID)
+// ListTeamLinks returns a team's links across every hostname, newest first.
+func (s *LinkService) ListTeamLinks(ctx context.Context, teamID int64) ([]domain.Link, error) {
+	return s.links.ListByTeam(ctx, teamID)
 }
 
 // ListHostnames returns the Hostname Registry for the create-link select.
@@ -325,7 +327,6 @@ func (s *LinkService) TeamMember(ctx context.Context, u *domain.User, teamID int
 
 // LinkAnalytics is the read model for a link's analytics summary.
 type LinkAnalytics struct {
-	Hostname       string
 	Code           string
 	RetentionDays  int
 	LifetimeVisits int64
@@ -335,15 +336,15 @@ type LinkAnalytics struct {
 
 // GetAnalytics returns a link's lifetime and window totals, after enforcing
 // read access.
-func (s *LinkService) GetAnalytics(ctx context.Context, u *domain.User, hostname, code string, from, to time.Time) (LinkAnalytics, error) {
-	if _, err := s.GetLink(ctx, u, hostname, code); err != nil {
+func (s *LinkService) GetAnalytics(ctx context.Context, u *domain.User, code string, from, to time.Time) (LinkAnalytics, error) {
+	if _, err := s.GetLink(ctx, u, code); err != nil {
 		return LinkAnalytics{}, err
 	}
-	a := LinkAnalytics{Hostname: hostname, Code: code, RetentionDays: s.retentionDays}
-	if lt, err := s.analytics.GetLifetime(ctx, hostname, code); err == nil {
+	a := LinkAnalytics{Code: code, RetentionDays: s.retentionDays}
+	if lt, err := s.analytics.GetLifetime(ctx, code); err == nil {
 		a.LifetimeVisits = lt.TotalVisits
 	}
-	visits, uniques, err := s.analytics.SumDailyStats(ctx, hostname, code, from, to)
+	visits, uniques, err := s.analytics.SumDailyStats(ctx, code, from, to)
 	if err != nil {
 		return LinkAnalytics{}, err
 	}
@@ -353,11 +354,11 @@ func (s *LinkService) GetAnalytics(ctx context.Context, u *domain.User, hostname
 }
 
 // GetTimeseries returns a link's daily buckets within a window, ascending.
-func (s *LinkService) GetTimeseries(ctx context.Context, u *domain.User, hostname, code string, from, to time.Time) ([]domain.DailyStats, error) {
-	if _, err := s.GetLink(ctx, u, hostname, code); err != nil {
+func (s *LinkService) GetTimeseries(ctx context.Context, u *domain.User, code string, from, to time.Time) ([]domain.DailyStats, error) {
+	if _, err := s.GetLink(ctx, u, code); err != nil {
 		return nil, err
 	}
-	rows, err := s.analytics.GetTimeseries(ctx, hostname, code, from, to)
+	rows, err := s.analytics.GetTimeseries(ctx, code, from, to)
 	if rows == nil {
 		rows = []domain.DailyStats{}
 	}
@@ -380,18 +381,18 @@ type LinkBreakdown struct {
 
 // GetBreakdowns returns a link's top-N dimension values for a window, after
 // enforcing read access. limit <= 0 returns every distinct value.
-func (s *LinkService) GetBreakdowns(ctx context.Context, u *domain.User, hostname, code, dimension string, from, to time.Time, limit int) (LinkBreakdown, error) {
+func (s *LinkService) GetBreakdowns(ctx context.Context, u *domain.User, code, dimension string, from, to time.Time, limit int) (LinkBreakdown, error) {
 	if !validDimensions[dimension] {
 		return LinkBreakdown{}, &ValidationError{Msg: "dimension must be referrer, device, os, browser, country, region, city, or a utm_* parameter"}
 	}
-	if _, err := s.GetLink(ctx, u, hostname, code); err != nil {
+	if _, err := s.GetLink(ctx, u, code); err != nil {
 		return LinkBreakdown{}, err
 	}
-	totals, err := s.analytics.GetBreakdowns(ctx, hostname, code, dimension, from, to, limit)
+	totals, err := s.analytics.GetBreakdowns(ctx, code, dimension, from, to, limit)
 	if err != nil {
 		return LinkBreakdown{}, err
 	}
-	visits, _, err := s.analytics.SumDailyStats(ctx, hostname, code, from, to)
+	visits, _, err := s.analytics.SumDailyStats(ctx, code, from, to)
 	if err != nil {
 		return LinkBreakdown{}, err
 	}

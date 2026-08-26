@@ -40,7 +40,32 @@ type LinkStore struct {
 func NewLinkStore(db *gorm.DB) *LinkStore { return &LinkStore{db: db} }
 
 func (s *LinkStore) Migrate(ctx context.Context) error {
+	// ADR 0019: a Link is now identified by a globally unique Code; the old
+	// (Hostname, Code) composite key cannot be altered in place by GORM, and
+	// existing data was cleared by decision. A table still carrying the old
+	// composite key is dropped and recreated; a fresh table is left alone.
+	if s.db.WithContext(ctx).Migrator().HasTable(&domain.Link{}) && hasCompositeLinkKey(s.db) {
+		if err := s.db.WithContext(ctx).Migrator().DropTable(&domain.Link{}); err != nil {
+			return err
+		}
+	}
 	return s.db.WithContext(ctx).AutoMigrate(&domain.Link{})
+}
+
+// hasCompositeLinkKey reports whether the links table still uses the legacy
+// (Hostname, Code) primary key, i.e. more than one column is a primary key.
+func hasCompositeLinkKey(db *gorm.DB) bool {
+	cols, err := db.Migrator().ColumnTypes(&domain.Link{})
+	if err != nil {
+		return false
+	}
+	keys := 0
+	for _, c := range cols {
+		if pk, ok := c.PrimaryKey(); ok && pk {
+			keys++
+		}
+	}
+	return keys > 1
 }
 
 func (s *LinkStore) Create(ctx context.Context, l *domain.Link) error {
@@ -51,9 +76,9 @@ func (s *LinkStore) Create(ctx context.Context, l *domain.Link) error {
 	return err
 }
 
-func (s *LinkStore) Get(ctx context.Context, hostname, code string) (*domain.Link, error) {
+func (s *LinkStore) Get(ctx context.Context, code string) (*domain.Link, error) {
 	var l domain.Link
-	err := s.db.WithContext(ctx).Where("hostname = ? AND code = ?", hostname, code).First(&l).Error
+	err := s.db.WithContext(ctx).Where("code = ?", code).First(&l).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -63,21 +88,21 @@ func (s *LinkStore) Get(ctx context.Context, hostname, code string) (*domain.Lin
 	return &l, nil
 }
 
-// List returns the personal links (not assigned to a team) of one creator on
-// a hostname, newest first.
-func (s *LinkStore) List(ctx context.Context, hostname string, creatorID int64) ([]domain.Link, error) {
+// List returns the personal links (not assigned to a team) of one creator
+// across every hostname, newest first.
+func (s *LinkStore) List(ctx context.Context, creatorID int64) ([]domain.Link, error) {
 	var links []domain.Link
 	err := s.db.WithContext(ctx).
-		Where("hostname = ? AND created_by = ? AND team_id IS NULL", hostname, creatorID).
+		Where("created_by = ? AND team_id IS NULL", creatorID).
 		Order("created_at DESC").Find(&links).Error
 	return links, err
 }
 
-// ListByTeam returns the links of a team on a hostname, newest first.
-func (s *LinkStore) ListByTeam(ctx context.Context, hostname string, teamID int64) ([]domain.Link, error) {
+// ListByTeam returns the links of a team across every hostname, newest first.
+func (s *LinkStore) ListByTeam(ctx context.Context, teamID int64) ([]domain.Link, error) {
 	var links []domain.Link
 	err := s.db.WithContext(ctx).
-		Where("hostname = ? AND team_id = ?", hostname, teamID).
+		Where("team_id = ?", teamID).
 		Order("created_at DESC").Find(&links).Error
 	return links, err
 }
@@ -102,9 +127,9 @@ func (s *LinkStore) Save(ctx context.Context, l *domain.Link) error {
 	return s.db.WithContext(ctx).Save(l).Error
 }
 
-func (s *LinkStore) Delete(ctx context.Context, hostname, code string) error {
+func (s *LinkStore) Delete(ctx context.Context, code string) error {
 	return s.db.WithContext(ctx).
-		Where("hostname = ? AND code = ?", hostname, code).
+		Where("code = ?", code).
 		Delete(&domain.Link{}).Error
 }
 

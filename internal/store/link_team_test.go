@@ -25,7 +25,7 @@ func TestLinkStorePersonalListExcludesTeamLinks(t *testing.T) {
 			t.Fatalf("create: %v", err)
 		}
 	}
-	got, err := s.List(ctx, "localhost", 1)
+	got, err := s.List(ctx, 1)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestLinkStoreListByTeam(t *testing.T) {
 			t.Fatalf("create: %v", err)
 		}
 	}
-	got, err := s.ListByTeam(ctx, "localhost", tid)
+	got, err := s.ListByTeam(ctx, tid)
 	if err != nil {
 		t.Fatalf("list by team: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestLinkStoreTransferTeamLinksToPersonal(t *testing.T) {
 	}
 	// team links became personal to their creators
 	for _, c := range []string{"one", "two"} {
-		l, err := s.Get(ctx, "localhost", c)
+		l, err := s.Get(ctx, c)
 		if err != nil {
 			t.Fatalf("get %s: %v", c, err)
 		}
@@ -90,7 +90,7 @@ func TestLinkStoreTransferTeamLinksToPersonal(t *testing.T) {
 		}
 	}
 	// the unrelated personal link is untouched
-	l, err := s.Get(ctx, "localhost", "three")
+	l, err := s.Get(ctx, "three")
 	if err != nil {
 		t.Fatalf("get three: %v", err)
 	}

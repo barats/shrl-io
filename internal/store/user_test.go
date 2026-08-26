@@ -80,7 +80,7 @@ func TestUserStoreAssignLinksToCreator(t *testing.T) {
 	if err := us.AssignLinksToCreator(ctx, u.ID); err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	links, err := ls.List(ctx, "localhost", u.ID)
+	links, err := ls.List(ctx, u.ID)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
