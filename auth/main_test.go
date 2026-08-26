@@ -174,6 +174,35 @@ func TestCreateAndManageLink(t *testing.T) {
 	}
 }
 
+func TestStatsOnAuthAPI(t *testing.T) {
+	s := newTestServer(t)
+	_, key := newKeyUser(t, s, "alice")
+
+	rec := do(t, s, "GET", "/v1/stats", key, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stats = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var st struct {
+		TotalLinks    int64 `json:"total_links"`
+		TotalVisits   int64 `json:"total_visits"`
+		WindowVisits  int64 `json:"window_visits"`
+		WindowUniques int64 `json:"window_uniques"`
+		Timeseries    []any `json:"timeseries"`
+	}
+	decode(t, rec, &st)
+	if st.TotalLinks != 0 || st.TotalVisits != 0 || st.WindowVisits != 0 || st.WindowUniques != 0 {
+		t.Fatalf("stats for empty user = %+v", st)
+	}
+	if st.Timeseries == nil {
+		t.Fatal("timeseries should be an empty array, not null")
+	}
+
+	// an unauthenticated stats call is rejected
+	if rec := do(t, s, "GET", "/v1/stats", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("stats without key = %d, want 401", rec.Code)
+	}
+}
+
 func TestNoDeleteOnAuthAPI(t *testing.T) {
 	s := newTestServer(t)
 	_, key := newKeyUser(t, s, "alice")

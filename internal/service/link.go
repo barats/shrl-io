@@ -416,6 +416,82 @@ var validDimensions = map[string]bool{
 	"utm_term": true, "utm_content": true, "utm_id": true,
 }
 
+// Stats is the read model for a user's or team's aggregate analytics.
+type Stats struct {
+	TotalLinks    int64
+	TotalVisits   int64
+	WindowVisits  int64
+	WindowUniques int64
+	Timeseries    []domain.DailyStats
+}
+
+// GetStats returns aggregates across a user's Personal links: all-time link
+// count and visit total, plus the window's visits and unique visitors and the
+// per-day timeseries summed across those links.
+func (s *LinkService) GetStats(ctx context.Context, userID int64, from, to time.Time) (Stats, error) {
+	links, err := s.links.List(ctx, userID)
+	if err != nil {
+		return Stats{}, err
+	}
+	return s.aggregateStats(ctx, links, from, to)
+}
+
+// GetTeamStats returns aggregates across a team's links, after enforcing read
+// access. Callers outside the team get ErrNotFound so team existence is not
+// leaked.
+func (s *LinkService) GetTeamStats(ctx context.Context, u *domain.User, teamID int64, from, to time.Time) (Stats, error) {
+	if _, err := s.GetTeam(ctx, u, teamID); err != nil {
+		return Stats{}, err
+	}
+	links, err := s.links.ListByTeam(ctx, teamID)
+	if err != nil {
+		return Stats{}, err
+	}
+	return s.aggregateStats(ctx, links, from, to)
+}
+
+func (s *LinkService) aggregateStats(ctx context.Context, links []domain.Link, from, to time.Time) (Stats, error) {
+	st := Stats{TotalLinks: int64(len(links))}
+	if len(links) == 0 {
+		st.Timeseries = []domain.DailyStats{}
+		return st, nil
+	}
+	codes := make([]string, len(links))
+	for i, l := range links {
+		codes[i] = l.Code
+	}
+	total, err := s.analytics.LifetimeTotal(ctx, codes)
+	if err != nil {
+		return Stats{}, err
+	}
+	st.TotalVisits = total
+	visits, uniques, err := s.analytics.SumDailyStatsForCodes(ctx, codes, from, to)
+	if err != nil {
+		return Stats{}, err
+	}
+	st.WindowVisits, st.WindowUniques = visits, uniques
+	rows, err := s.analytics.GetTimeseriesForCodes(ctx, codes, from, to)
+	if err != nil {
+		return Stats{}, err
+	}
+	if rows == nil {
+		rows = []domain.DailyStats{}
+	}
+	st.Timeseries = rows
+	return st, nil
+}
+
+// StatsWindow returns the from/to range for aggregate dashboard reads,
+// defaulting to the last 30 days.
+func (s *LinkService) StatsWindow(fromParam, toParam string, now time.Time) (time.Time, time.Time) {
+	to := parseDayParam(toParam, now)
+	from := parseDayParam(fromParam, now.AddDate(0, 0, -30))
+	if from.After(to) {
+		from, to = to, from
+	}
+	return from, to
+}
+
 // AnalyticsWindow returns the from/to date range for analytics reads,
 // defaulting to the retention window.
 func (s *LinkService) AnalyticsWindow(fromParam, toParam string, now time.Time) (time.Time, time.Time) {

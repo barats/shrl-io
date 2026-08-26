@@ -90,6 +90,15 @@ export interface BreakdownResponse {
 	other: number;
 }
 
+// Aggregate analytics across a user's or team's links (GET /stats).
+export interface Stats {
+	total_links: number;
+	total_visits: number;
+	window_visits: number;
+	window_uniques: number;
+	timeseries: TimeseriesRow[];
+}
+
 export const DIMENSIONS = [
 	'referrer',
 	'device',

@@ -5,6 +5,7 @@ import type {
 	InviteCode,
 	Link,
 	Settings,
+	Stats,
 	Team,
 	TeamDetail,
 	TeamMember,
@@ -133,6 +134,20 @@ export const api = {
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
 		return req<BreakdownResponse>(`links/${encodeURIComponent(code)}/analytics/breakdowns?${q}`);
+	},
+
+	async getStats(from?: string, to?: string): Promise<Stats> {
+		const q = new URLSearchParams();
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<Stats>(`stats?${q}`);
+	},
+
+	async getTeamStats(id: number, from?: string, to?: string): Promise<Stats> {
+		const q = new URLSearchParams();
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<Stats>(`teams/${id}/stats?${q}`);
 	},
 
 	async login(username: string, password: string): Promise<void> {

@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import type { InviteCode, Link, TeamDetail, TeamRole, User } from '$lib/types';
+	import { api, daysAgo } from '$lib/api';
+	import type { InviteCode, Link, Stats, TeamDetail, TeamRole, User } from '$lib/types';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -14,15 +14,7 @@
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import {
-		Select,
-		SelectContent,
-		SelectItem,
-		SelectTrigger
-	} from '$lib/components/ui/select';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import {
 		Table,
@@ -42,6 +34,8 @@
 		TriangleAlert,
 		UserPlus
 	} from '@lucide/svelte';
+	import StatsChart from '$lib/components/StatsChart.svelte';
+	import CreateLinkDialog from '$lib/components/CreateLinkDialog.svelte';
 
 	const teamId = $derived(Number(page.params.id));
 	const isAdmin = $derived(page.data.user?.isAdmin ?? false);
@@ -52,9 +46,12 @@
 	let error = $state('');
 
 	let hostnames = $state<string[]>([]);
+	let defaultHostname = $state('');
 	let teamLinks = $state<Link[]>([]);
+	let stats = $state<Stats | null>(null);
 	let linksLoading = $state(true);
 	let linksError = $state('');
+	let createOpen = $state(false);
 
 	let invites = $state<InviteCode[]>([]);
 	let invitesLoading = $state(true);
@@ -64,13 +61,6 @@
 	let addUsername = $state('');
 	let addingMember = $state(false);
 	let memberError = $state('');
-
-	let createDestination = $state('');
-	let createRemark = $state('');
-	let createForwardUTM = $state(false);
-	let createHostname = $state('');
-	let creating = $state(false);
-	let createError = $state('');
 
 	const myRole = $derived<TeamRole | undefined>(
 		team?.members.find((m) => m.id === me?.id)?.role
@@ -85,8 +75,8 @@
 			team = t;
 			me = u;
 			hostnames = [...new Set([cfg.defaultHostname, ...hs])].sort();
-			createHostname = cfg.defaultHostname;
-			await Promise.all([loadLinks(), loadInvites()]);
+			defaultHostname = cfg.defaultHostname;
+			await Promise.all([loadLinks(), loadStats(), loadInvites()]);
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -103,6 +93,14 @@
 			linksError = (e as Error).message;
 		} finally {
 			linksLoading = false;
+		}
+	}
+
+	async function loadStats() {
+		try {
+			stats = await api.getTeamStats(teamId, daysAgo(30));
+		} catch (e) {
+			linksError = (e as Error).message;
 		}
 	}
 
@@ -206,27 +204,6 @@
 			error = (e as Error).message;
 		}
 	}
-
-	async function createTeamLink() {
-		creating = true;
-		createError = '';
-		try {
-			await api.createTeamLink(teamId, {
-				hostname: createHostname,
-				destination: createDestination,
-				remark: createRemark || undefined,
-				forward_utm: createForwardUTM
-			});
-			createDestination = '';
-			createRemark = '';
-			createForwardUTM = false;
-			await loadLinks();
-		} catch (e) {
-			createError = (e as Error).message;
-		} finally {
-			creating = false;
-		}
-	}
 </script>
 
 {#if loading}
@@ -267,6 +244,43 @@
 		Created {team.created_at.slice(0, 10)} · {team.members.length}{' '}
 		{team.members.length === 1 ? 'member' : 'members'}
 	</p>
+
+	<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+		<Card>
+			<CardHeader class="pb-2">
+				<CardTitle class="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
+			</CardHeader>
+			<CardContent class="pt-0">
+				<p class="text-2xl font-semibold">{stats?.total_links ?? 0}</p>
+			</CardContent>
+		</Card>
+		<Card>
+			<CardHeader class="pb-2">
+				<CardTitle class="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
+			</CardHeader>
+			<CardContent class="pt-0">
+				<p class="text-2xl font-semibold">{stats?.total_visits ?? 0}</p>
+			</CardContent>
+		</Card>
+		<Card>
+			<CardHeader class="pb-2">
+				<CardTitle class="text-sm font-medium text-muted-foreground">Unique Visitors</CardTitle>
+			</CardHeader>
+			<CardContent class="pt-0">
+				<p class="text-2xl font-semibold">{stats?.window_uniques ?? 0}</p>
+				<p class="text-xs text-muted-foreground">last 30 days</p>
+			</CardContent>
+		</Card>
+	</div>
+
+	<Card class="mt-6">
+		<CardHeader>
+			<CardTitle>Visits & Visitors (last 30 days)</CardTitle>
+		</CardHeader>
+		<CardContent>
+			<StatsChart rows={stats?.timeseries ?? []} />
+		</CardContent>
+	</Card>
 
 	<div class="mt-6 grid gap-6 lg:grid-cols-2">
 		<div class="space-y-6">
@@ -409,8 +423,11 @@
 
 		<div class="space-y-6">
 			<Card>
-				<CardHeader>
+				<CardHeader class="flex-row items-center justify-between space-y-0">
 					<CardTitle>Team Links</CardTitle>
+					<Button size="sm" onclick={() => (createOpen = true)}>
+						<Plus class="size-4" /> Create Link
+					</Button>
 				</CardHeader>
 				<CardContent>
 					{#if linksError}
@@ -426,7 +443,7 @@
 						</div>
 					{:else if teamLinks.length === 0}
 						<p class="py-8 text-center text-sm text-muted-foreground">
-							No Links yet. Create one below.
+							No Links yet. Create one with the button above.
 						</p>
 					{:else}
 						<Table>
@@ -470,74 +487,16 @@
 					{/if}
 				</CardContent>
 			</Card>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Create a Link in this Team</CardTitle>
-					<CardDescription>
-						Shorten a Destination under a registered Hostname. The Team owns the Link.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{#if createError}
-						<Alert variant="destructive" class="mb-4">
-							<TriangleAlert class="size-4" />
-							<AlertTitle>Could not create Link</AlertTitle>
-							<AlertDescription>{createError}</AlertDescription>
-						</Alert>
-					{/if}
-					<form
-						onsubmit={(e) => {
-							e.preventDefault();
-							createTeamLink();
-						}}
-						class="space-y-4"
-					>
-						<div class="space-y-2">
-							<Label for="team-link-hostname">Hostname</Label>
-							<Select type="single" bind:value={createHostname}>
-								<SelectTrigger id="team-link-hostname" class="w-full">
-									<span data-slot="select-value">{createHostname || 'Hostname'}</span>
-								</SelectTrigger>
-								<SelectContent>
-									{#each hostnames as host (host)}
-										<SelectItem value={host} label={host} />
-									{/each}
-								</SelectContent>
-							</Select>
-						</div>
-						<div class="space-y-2">
-							<Label for="team-link-destination">Destination</Label>
-							<Input
-								id="team-link-destination"
-								bind:value={createDestination}
-								placeholder="https://example.com"
-								required
-							/>
-						</div>
-						<div class="space-y-2">
-							<Label for="team-link-remark">Remark (optional)</Label>
-							<Input id="team-link-remark" bind:value={createRemark} placeholder="What this Link is for" />
-						</div>
-						<div class="flex items-start gap-2">
-							<Checkbox id="team-link-forward-utm" bind:checked={createForwardUTM} class="mt-0.5" />
-							<Label
-								for="team-link-forward-utm"
-								class="font-normal leading-snug text-muted-foreground"
-							>
-								Forward UTM parameters from the short URL to the Destination
-							</Label>
-						</div>
-						<Button type="submit" class="w-full" disabled={creating}>
-							{#if creating}
-								Creating…
-							{:else}
-								<Plus class="size-4" /> Create Link
-							{/if}
-						</Button>
-					</form>
-				</CardContent>
-			</Card>
 		</div>
 	</div>
+
+	<CreateLinkDialog
+		bind:open={createOpen}
+		{hostnames}
+		{defaultHostname}
+		{teamId}
+		onCreated={async () => {
+			await Promise.all([loadLinks(), loadStats()]);
+		}}
+	/>
 {/if}

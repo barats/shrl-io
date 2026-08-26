@@ -196,6 +196,51 @@ func (s *AnalyticsStore) GetBreakdowns(ctx context.Context, code, dimension stri
 	return totals, err
 }
 
+// LifetimeTotal returns the summed all-time visit total for a set of codes.
+func (s *AnalyticsStore) LifetimeTotal(ctx context.Context, codes []string) (int64, error) {
+	if len(codes) == 0 {
+		return 0, nil
+	}
+	var row struct{ Total int64 }
+	err := s.db.WithContext(ctx).Model(&domain.LifetimeStats{}).
+		Select("COALESCE(SUM(total_visits), 0) AS total").
+		Where("code IN ?", codes).
+		Scan(&row).Error
+	return row.Total, err
+}
+
+// SumDailyStatsForCodes returns total visits and unique visitors within a
+// window, summed across the given codes.
+func (s *AnalyticsStore) SumDailyStatsForCodes(ctx context.Context, codes []string, from, to time.Time) (visits, uniques int64, err error) {
+	if len(codes) == 0 {
+		return 0, 0, nil
+	}
+	var row struct {
+		Visits  int64
+		Uniques int64
+	}
+	err = s.db.WithContext(ctx).Model(&domain.DailyStats{}).
+		Select("COALESCE(SUM(visits), 0) AS visits, COALESCE(SUM(unique_visitors), 0) AS uniques").
+		Where("code IN ? AND day >= ? AND day <= ?", codes, from, to).
+		Scan(&row).Error
+	return row.Visits, row.Uniques, err
+}
+
+// GetTimeseriesForCodes returns per-day totals within a window, ascending,
+// summed across the given codes.
+func (s *AnalyticsStore) GetTimeseriesForCodes(ctx context.Context, codes []string, from, to time.Time) ([]domain.DailyStats, error) {
+	if len(codes) == 0 {
+		return nil, nil
+	}
+	var rows []domain.DailyStats
+	err := s.db.WithContext(ctx).Model(&domain.DailyStats{}).
+		Select("day, SUM(visits) AS visits, SUM(unique_visitors) AS unique_visitors").
+		Where("code IN ? AND day >= ? AND day <= ?", codes, from, to).
+		Group("day").Order("day ASC").
+		Scan(&rows).Error
+	return rows, err
+}
+
 // PruneAnalytics deletes daily rollups and breakdowns older than the
 // retention window. Lifetime totals are never pruned.
 func (s *AnalyticsStore) PruneAnalytics(ctx context.Context, before time.Time) error {

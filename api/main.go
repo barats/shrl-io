@@ -138,6 +138,8 @@ func (s *server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /links/{code}/analytics", s.getAnalytics)
 	mux.HandleFunc("GET /links/{code}/analytics/timeseries", s.getAnalyticsTimeseries)
 	mux.HandleFunc("GET /links/{code}/analytics/breakdowns", s.getAnalyticsBreakdowns)
+	mux.HandleFunc("GET /stats", s.getStats)
+	mux.HandleFunc("GET /teams/{id}/stats", s.getTeamStats)
 	mux.HandleFunc("POST /teams", s.createTeam)
 	mux.HandleFunc("GET /teams", s.listTeams)
 	mux.HandleFunc("GET /teams/{id}", s.getTeam)

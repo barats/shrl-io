@@ -1,26 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api } from '$lib/api';
-	import type { Link } from '$lib/types';
+	import { api, daysAgo } from '$lib/api';
+	import type { Link, Stats } from '$lib/types';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import {
 		Card,
 		CardContent,
-		CardDescription,
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import {
-		Select,
-		SelectContent,
-		SelectItem,
-		SelectTrigger
-	} from '$lib/components/ui/select';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import {
 		Table,
@@ -31,26 +21,24 @@
 		TableRow
 	} from '$lib/components/ui/table';
 	import { Link2, Plus, TriangleAlert } from '@lucide/svelte';
+	import StatsChart from '$lib/components/StatsChart.svelte';
+	import CreateLinkDialog from '$lib/components/CreateLinkDialog.svelte';
 
 	let hostnames = $state<string[]>([]);
+	let defaultHostname = $state('');
 	let links = $state<Link[]>([]);
+	let stats = $state<Stats | null>(null);
 	let loading = $state(true);
 	let error = $state('');
-
-	let createHostname = $state('');
-	let createDestination = $state('');
-	let createRemark = $state('');
-	let createForwardUTM = $state(false);
-	let creating = $state(false);
-	let createError = $state('');
+	let createOpen = $state(false);
 
 	onMount(async () => {
 		try {
 			const cfg = await api.config();
 			const hs = await api.hostnames();
 			hostnames = [...new Set([cfg.defaultHostname, ...hs])].sort();
-			createHostname = cfg.defaultHostname;
-			await loadLinks();
+			defaultHostname = cfg.defaultHostname;
+			await Promise.all([loadStats(), loadLinks()]);
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -58,68 +46,92 @@
 		}
 	});
 
+	async function loadStats() {
+		try {
+			stats = await api.getStats(daysAgo(30));
+		} catch (e) {
+			error = (e as Error).message;
+		}
+	}
+
 	async function loadLinks() {
-		loading = true;
-		error = '';
 		try {
 			links = await api.listLinks();
 		} catch (e) {
 			error = (e as Error).message;
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function create() {
-		creating = true;
-		createError = '';
-		try {
-			await api.createLink({
-				hostname: createHostname || undefined,
-				destination: createDestination,
-				remark: createRemark || undefined,
-				forward_utm: createForwardUTM
-			});
-			const createdHost = createHostname;
-			createDestination = '';
-			createRemark = '';
-			createForwardUTM = false;
-			if (!hostnames.includes(createdHost)) {
-				hostnames = [...hostnames, createdHost].sort();
-			}
-			await loadLinks();
-		} catch (e) {
-			createError = (e as Error).message;
-		} finally {
-			creating = false;
 		}
 	}
 </script>
 
-<h1 class="text-2xl font-semibold tracking-tight">Links</h1>
+<div class="flex flex-wrap items-center justify-between gap-3">
+	<h1 class="text-2xl font-semibold tracking-tight">Links</h1>
+	<Button onclick={() => (createOpen = true)}>
+		<Plus class="size-4" /> Create Link
+	</Button>
+</div>
 
-<div class="mt-4 grid gap-6 lg:grid-cols-3">
-	<div class="lg:col-span-2">
+{#if error}
+	<Alert variant="destructive" class="mt-4">
+		<TriangleAlert class="size-4" />
+		<AlertTitle>Failed to load Links</AlertTitle>
+		<AlertDescription>{error}</AlertDescription>
+	</Alert>
+{/if}
+
+<div class="mt-4 space-y-6">
+	{#if loading}
+		<div class="grid grid-cols-3 gap-4">
+			{#each [0, 1, 2] as i (i)}
+				<Skeleton class="h-24 w-full" />
+			{/each}
+		</div>
+		<Skeleton class="h-48 w-full" />
+	{:else}
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{stats?.total_links ?? 0}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{stats?.total_visits ?? 0}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Unique Visitors</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{stats?.window_uniques ?? 0}</p>
+					<p class="text-xs text-muted-foreground">last 30 days</p>
+				</CardContent>
+			</Card>
+		</div>
+
+		<Card>
+			<CardHeader>
+				<CardTitle>Visits & Visitors (last 30 days)</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<StatsChart rows={stats?.timeseries ?? []} />
+			</CardContent>
+		</Card>
+
 		<Card>
 			<CardHeader>
 				<CardTitle>All Links</CardTitle>
 			</CardHeader>
 			<CardContent>
-				{#if error}
-					<Alert variant="destructive">
-						<TriangleAlert class="size-4" />
-						<AlertTitle>Failed to load Links</AlertTitle>
-						<AlertDescription>{error}</AlertDescription>
-					</Alert>
-				{:else if loading}
-					<div class="space-y-3">
-						{#each [0, 1, 2, 3] as i (i)}
-							<Skeleton class="h-10 w-full" />
-						{/each}
-					</div>
-				{:else if links.length === 0}
+				{#if links.length === 0}
 					<p class="py-8 text-center text-sm text-muted-foreground">
-						No Links yet. Create one on the right.
+						No Links yet. Create one with the button above.
 					</p>
 				{:else}
 					<Table>
@@ -163,77 +175,14 @@
 				{/if}
 			</CardContent>
 		</Card>
-	</div>
-
-	<div>
-		<Card>
-			<CardHeader>
-				<CardTitle>Create a Link</CardTitle>
-				<CardDescription>Shorten a Destination under this instance's hostnames.</CardDescription>
-			</CardHeader>
-			<CardContent>
-				{#if createError}
-					<Alert variant="destructive" class="mb-4">
-						<TriangleAlert class="size-4" />
-						<AlertTitle>Could not create Link</AlertTitle>
-						<AlertDescription>{createError}</AlertDescription>
-					</Alert>
-				{/if}
-				<form
-					onsubmit={(e) => {
-						e.preventDefault();
-						create();
-					}}
-					class="space-y-4"
-				>
-					<div class="space-y-2">
-						<Label for="new-hostname">Hostname</Label>
-						<Select type="single" bind:value={createHostname}>
-							<SelectTrigger id="new-hostname" class="w-full">
-								<span data-slot="select-value">{createHostname || 'Hostname'}</span>
-							</SelectTrigger>
-							<SelectContent>
-								{#each hostnames as host (host)}
-									<SelectItem value={host} label={host} />
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
-					<div class="space-y-2">
-						<Label for="new-destination">Destination</Label>
-						<Input
-							id="new-destination"
-							bind:value={createDestination}
-							placeholder="https://example.com"
-							required
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="new-remark">Remark (optional)</Label>
-						<Input
-							id="new-remark"
-							bind:value={createRemark}
-							placeholder="What this Link is for"
-						/>
-					</div>
-					<div class="flex items-start gap-2">
-						<Checkbox id="new-forward-utm" bind:checked={createForwardUTM} class="mt-0.5" />
-						<Label
-							for="new-forward-utm"
-							class="font-normal leading-snug text-muted-foreground"
-						>
-							Forward UTM parameters from the short URL to the Destination
-						</Label>
-					</div>
-					<Button type="submit" class="w-full" disabled={creating}>
-						{#if creating}
-							Creating…
-						{:else}
-							<Plus class="size-4" /> Create Link
-						{/if}
-					</Button>
-				</form>
-			</CardContent>
-		</Card>
-	</div>
+	{/if}
 </div>
+
+<CreateLinkDialog
+	bind:open={createOpen}
+	{hostnames}
+	{defaultHostname}
+	onCreated={async () => {
+		await Promise.all([loadStats(), loadLinks()]);
+	}}
+/>

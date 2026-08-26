@@ -104,3 +104,61 @@ func TestAnalyticsStoreBreakdownsLimit(t *testing.T) {
 		t.Fatalf("scoped len = %d, %v (want 12)", len(scoped), err)
 	}
 }
+
+func TestAnalyticsStoreAggregatesAcrossCodes(t *testing.T) {
+	db := newTestDB(t)
+	s := NewAnalyticsStore(db)
+	ctx := context.Background()
+
+	day1 := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	day2 := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+
+	seed := []*domain.DailyStats{
+		{Code: "abc", Day: day1, Visits: 5, UniqueVisitors: 3},
+		{Code: "abc", Day: day2, Visits: 7, UniqueVisitors: 4},
+		{Code: "other", Day: day2, Visits: 2, UniqueVisitors: 2},
+	}
+	for _, d := range seed {
+		if err := db.Create(d).Error; err != nil {
+			t.Fatalf("seed daily: %v", err)
+		}
+	}
+	for _, l := range []*domain.LifetimeStats{
+		{Code: "abc", TotalVisits: 12},
+		{Code: "other", TotalVisits: 99},
+	} {
+		if err := db.Create(l).Error; err != nil {
+			t.Fatalf("seed lifetime: %v", err)
+		}
+	}
+
+	// window across both codes
+	visits, uniques, err := s.SumDailyStatsForCodes(ctx, []string{"abc", "other"}, day1, day2)
+	if err != nil || visits != 14 || uniques != 9 {
+		t.Fatalf("sum across codes = %d/%d, %v (want 14/9)", visits, uniques, err)
+	}
+
+	// all-time total across both codes
+	total, err := s.LifetimeTotal(ctx, []string{"abc", "other"})
+	if err != nil || total != 111 {
+		t.Fatalf("lifetime total = %d, %v (want 111)", total, err)
+	}
+
+	// timeseries grouped by day across both codes, ascending
+	rows, err := s.GetTimeseriesForCodes(ctx, []string{"abc", "other"}, day1, day2)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("timeseries = %+v, %v", rows, err)
+	}
+	if !rows[0].Day.Equal(day1) || rows[0].Visits != 5 || rows[0].UniqueVisitors != 3 {
+		t.Fatalf("day1 row wrong: %+v", rows[0])
+	}
+	if !rows[1].Day.Equal(day2) || rows[1].Visits != 9 || rows[1].UniqueVisitors != 6 {
+		t.Fatalf("day2 row wrong: %+v", rows[1])
+	}
+
+	// an empty code set returns zeros without querying
+	v, u, err := s.SumDailyStatsForCodes(ctx, nil, day1, day2)
+	if err != nil || v != 0 || u != 0 {
+		t.Fatalf("empty codes sum = %d/%d, %v", v, u, err)
+	}
+}

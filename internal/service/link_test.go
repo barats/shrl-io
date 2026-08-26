@@ -227,3 +227,59 @@ func TestAnalyticsRequiresReadAccess(t *testing.T) {
 		t.Fatal("bad dimension should be a validation error")
 	}
 }
+
+func TestAggregateStatsScope(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+	alice := &domain.User{ID: 1, Username: "alice"}
+	bob := &domain.User{ID: 2, Username: "bob"}
+
+	// alice owns two personal links; bob owns one.
+	if _, err := svc.CreateLink(ctx, nil, alice.ID, CreateLinkInput{Destination: "https://example.com/a"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateLink(ctx, nil, alice.ID, CreateLinkInput{Destination: "https://example.com/b"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateLink(ctx, nil, bob.ID, CreateLinkInput{Destination: "https://example.com/c"}); err != nil {
+		t.Fatal(err)
+	}
+
+	from, to := svc.StatsWindow("", "", time.Now().UTC())
+	st, err := svc.GetStats(ctx, alice.ID, from, to)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.TotalLinks != 2 {
+		t.Fatalf("total links = %d, want alice's 2", st.TotalLinks)
+	}
+	if st.TotalVisits != 0 || st.WindowVisits != 0 || st.WindowUniques != 0 {
+		t.Fatalf("expected zero analytics, got %+v", st)
+	}
+	if len(st.Timeseries) != 0 {
+		t.Fatalf("timeseries = %+v, want empty", st.Timeseries)
+	}
+
+	// Team stats enforce read access.
+	team := &domain.Team{Name: "growth", CreatedBy: alice.ID}
+	if err := svc.teams.Create(ctx, team); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.teams.AddMember(ctx, team.ID, alice.ID, domain.RoleOwner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateLink(ctx, &team.ID, alice.ID, CreateLinkInput{Destination: "https://example.com/t"}); err != nil {
+		t.Fatal(err)
+	}
+	tst, err := svc.GetTeamStats(ctx, alice, team.ID, from, to)
+	if err != nil {
+		t.Fatalf("team stats: %v", err)
+	}
+	if tst.TotalLinks != 1 {
+		t.Fatalf("team total links = %d, want 1", tst.TotalLinks)
+	}
+	// an outsider cannot see team stats (team existence not leaked)
+	if _, err := svc.GetTeamStats(ctx, bob, team.ID, from, to); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("outsider team stats err = %v, want ErrNotFound", err)
+	}
+}
