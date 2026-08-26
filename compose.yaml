@@ -29,13 +29,35 @@ services:
     environment:
       SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
       SHRL_REDIS_ADDR: redis:6379
+      SHRL_API_INTERNAL_SECRET: ${SHRL_API_INTERNAL_SECRET:-dev-internal-secret}
       SHRL_ADMIN_USERNAME: ${SHRL_ADMIN_USERNAME:-admin}
       SHRL_ADMIN_PASSWORD: ${SHRL_ADMIN_PASSWORD:-}
       SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
       SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
       SHRL_API_ADDR: :8080
+    # The Internal API is frontend-only (ADR 0015): reachable inside the
+    # compose network only, never published to the host.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  auth:
+    build: .
+    command: ["auth"]
+    environment:
+      SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
+      SHRL_REDIS_ADDR: redis:6379
+      SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
+      SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
+      SHRL_AUTH_ADDR: :8080
+      SHRL_AUTH_RATE_LIMIT_IP: ${SHRL_AUTH_RATE_LIMIT_IP:-60}
+      SHRL_AUTH_RATE_LIMIT_KEY_READ: ${SHRL_AUTH_RATE_LIMIT_KEY_READ:-300}
+      SHRL_AUTH_RATE_LIMIT_KEY_WRITE: ${SHRL_AUTH_RATE_LIMIT_KEY_WRITE:-30}
+      SHRL_AUTH_RATE_LIMIT_FAIL: ${SHRL_AUTH_RATE_LIMIT_FAIL:-10}
     ports:
-      - "8081:8080"
+      - "8083:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +97,7 @@ services:
     build: ./frontend
     environment:
       SHRL_API_URL: http://api:8080
+      SHRL_API_INTERNAL_SECRET: ${SHRL_API_INTERNAL_SECRET:-dev-internal-secret}
       SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
       SHRL_SESSION_SECRET: ${SHRL_SESSION_SECRET:-dev-session-secret}
       SHRL_COOKIE_SECURE: ${SHRL_COOKIE_SECURE:-false}

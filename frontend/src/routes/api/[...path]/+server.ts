@@ -1,4 +1,4 @@
-import { config } from '$lib/server/config';
+import { apiFetch } from '$lib/server/config';
 import { clearSessionCookie, readSession } from '$lib/server/auth';
 import type { RequestHandler } from './$types';
 
@@ -12,8 +12,6 @@ async function proxy(request: Request, path: string): Promise<Response> {
 	}
 
 	const url = new URL(request.url);
-	const target = `${config.apiUrl}/${path}${url.search}`;
-
 	const headers = new Headers();
 	const contentType = request.headers.get('content-type');
 	if (contentType) headers.set('content-type', contentType);
@@ -22,7 +20,7 @@ async function proxy(request: Request, path: string): Promise<Response> {
 	const body =
 		request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
 
-	const res = await fetch(target, { method: request.method, headers, body });
+	const res = await apiFetch(`${path}${url.search}`, { method: request.method, headers, body });
 
 	const responseHeaders = new Headers();
 	const responseContentType = res.headers.get('content-type');

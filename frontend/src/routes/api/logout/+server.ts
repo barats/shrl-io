@@ -1,10 +1,10 @@
-import { config } from '$lib/server/config';
+import { apiFetch } from '$lib/server/config';
 import { clearSessionCookie, readSession } from '$lib/server/auth';
 
 export async function POST({ request }) {
 	const session = readSession(request.headers.get('cookie'));
 	if (session) {
-		await fetch(`${config.apiUrl}/logout`, {
+		await apiFetch('logout', {
 			method: 'POST',
 			headers: { authorization: `Bearer ${session.token}` }
 		}).catch(() => {});

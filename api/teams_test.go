@@ -20,6 +20,7 @@ import (
 
 	"github.com/barats/shrl-io/internal/cache"
 	"github.com/barats/shrl-io/internal/domain"
+	"github.com/barats/shrl-io/internal/service"
 	"github.com/barats/shrl-io/internal/store"
 )
 
@@ -60,16 +61,22 @@ func newTestServer(t *testing.T) *server {
 	if err := hs.Create(context.Background(), &domain.Hostname{Name: "localhost"}); err != nil {
 		t.Fatalf("register hostname: %v", err)
 	}
+	links := store.NewLinkStore(db)
+	analytics := store.NewAnalyticsStore(db)
+	teams := store.NewTeamStore(db)
+	settings := store.NewSettingStore(db)
+	linkCache := cache.NewLinkCache(client)
 	return &server{
-		links:     store.NewLinkStore(db),
-		analytics: store.NewAnalyticsStore(db),
+		links:     links,
+		analytics: analytics,
 		users:     store.NewUserStore(db),
 		hostnames: hs,
-		teams:     store.NewTeamStore(db),
+		teams:     teams,
 		invites:   store.NewInviteStore(db),
-		settings:  store.NewSettingStore(db),
-		linkCache: cache.NewLinkCache(client),
-		cfg:       config{defaultHostname: "localhost", retentionDays: 30, tokenTTL: time.Hour},
+		settings:  settings,
+		linkCache: linkCache,
+		linkSvc:   service.NewLinkService(links, analytics, hs, teams, settings, linkCache, "localhost", 30),
+		cfg:       config{defaultHostname: "localhost", retentionDays: 30, tokenTTL: time.Hour, internalSecret: "test-secret"},
 	}
 }
 

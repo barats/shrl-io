@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -14,6 +15,25 @@ import (
 type ctxKey int
 
 const userKey ctxKey = 0
+
+// internalSecretHeader carries the shared secret the frontend presents on
+// every proxied request (ADR 0015). The api is reachable only on the internal
+// network; this header is defense-in-depth, not user auth.
+const internalSecretHeader = "X-Shrl-Internal-Secret"
+
+// internalHeader rejects every request that lacks the shared frontend secret,
+// including /login and /logout, which only ever arrive proxied by the
+// frontend server.
+func (s *server) internalHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := r.Header.Get(internalSecretHeader)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.internalSecret)) != 1 {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func currentUser(r *http.Request) *domain.User {
 	u, _ := r.Context().Value(userKey).(*domain.User)

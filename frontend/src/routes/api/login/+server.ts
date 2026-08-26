@@ -1,4 +1,4 @@
-import { config } from '$lib/server/config';
+import { apiFetch, config } from '$lib/server/config';
 import { createSessionCookie } from '$lib/server/auth';
 
 export async function POST({ request }) {
@@ -12,7 +12,7 @@ export async function POST({ request }) {
 		});
 	}
 
-	const res = await fetch(`${config.apiUrl}/login`, {
+	const res = await apiFetch('login', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({ username, password })

@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { readSession } from '$lib/server/auth';
-import { config } from '$lib/server/config';
+import { apiFetch } from '$lib/server/config';
 
 export async function load({ request, url }) {
 	const session = readSession(request.headers.get('cookie'));
@@ -11,7 +11,7 @@ export async function load({ request, url }) {
 	let mustChangePassword = session?.mustChangePassword === true;
 	if (mustChangePassword && session) {
 		try {
-			const res = await fetch(`${config.apiUrl}/me`, {
+			const res = await apiFetch('me', {
 				headers: { authorization: `Bearer ${session.token}` }
 			});
 			const body = (await res.json().catch(() => null)) as { must_change_password?: boolean } | null;

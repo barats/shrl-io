@@ -98,30 +98,19 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 // listTeams returns the caller's teams with their role; admins additionally
 // see every team (instance oversight) with an empty role when not a member.
 func (s *server) listTeams(w http.ResponseWriter, r *http.Request) {
-	u := currentUser(r)
-	var teams []domain.Team
-	var err error
-	if u.IsAdmin {
-		teams, err = s.teams.ListAll(r.Context())
-	} else {
-		teams, err = s.teams.ListForUser(r.Context(), u.ID)
-	}
+	summaries, err := s.linkSvc.ListTeamSummaries(r.Context(), currentUser(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list teams")
 		return
 	}
-	items := make([]map[string]any, 0, len(teams))
-	for _, t := range teams {
-		role, err := s.teams.MemberRole(r.Context(), t.ID, u.ID)
-		if err != nil {
-			role = ""
-		}
+	items := make([]map[string]any, 0, len(summaries))
+	for _, ts := range summaries {
 		items = append(items, map[string]any{
-			"id":         t.ID,
-			"name":       t.Name,
-			"created_by": t.CreatedBy,
-			"created_at": t.CreatedAt,
-			"role":       role,
+			"id":         ts.Team.ID,
+			"name":       ts.Team.Name,
+			"created_by": ts.Team.CreatedBy,
+			"created_at": ts.Team.CreatedAt,
+			"role":       ts.Role,
 		})
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -172,7 +161,7 @@ func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
 	if !s.requireTeamRead(w, r, t.ID) {
 		return
 	}
-	links, err := s.links.ListByTeam(r.Context(), s.hostname(r), t.ID)
+	links, err := s.linkSvc.ListTeamLinks(r.Context(), s.hostname(r), t.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
@@ -192,7 +181,7 @@ func (s *server) createTeamLink(w http.ResponseWriter, r *http.Request) {
 	if !s.requireTeamMember(w, r, t.ID) {
 		return
 	}
-	s.createLinkInScope(w, r, &t.ID, currentUser(r).ID)
+	s.createLinkInScope(w, r, &t.ID)
 }
 
 // addTeamMember adds an existing user to the team as a member. Direct add is

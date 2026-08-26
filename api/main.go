@@ -14,6 +14,7 @@ import (
 	"github.com/barats/shrl-io/internal/domain"
 	"github.com/barats/shrl-io/internal/env"
 	"github.com/barats/shrl-io/internal/redisutil"
+	"github.com/barats/shrl-io/internal/service"
 	"github.com/barats/shrl-io/internal/store"
 )
 
@@ -21,6 +22,7 @@ type config struct {
 	addr            string
 	databaseURL     string
 	redisAddr       string
+	internalSecret  string
 	adminUsername   string
 	adminPassword   string
 	defaultHostname string
@@ -35,6 +37,7 @@ func loadConfig() config {
 		addr:            env.Or("SHRL_API_ADDR", ":8080"),
 		databaseURL:     env.Or("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
 		redisAddr:       env.Or("SHRL_REDIS_ADDR", "localhost:6379"),
+		internalSecret:  env.Or("SHRL_API_INTERNAL_SECRET", "dev-internal-secret"),
 		adminUsername:   env.Or("SHRL_ADMIN_USERNAME", "admin"),
 		adminPassword:   os.Getenv("SHRL_ADMIN_PASSWORD"),
 		defaultHostname: env.Or("SHRL_DEFAULT_HOSTNAME", "localhost"),
@@ -54,6 +57,7 @@ type server struct {
 	invites   *store.InviteStore
 	settings  *store.SettingStore
 	linkCache *cache.LinkCache
+	linkSvc   *service.LinkService
 	cfg       config
 }
 
@@ -96,7 +100,8 @@ func main() {
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, invites: invites, settings: settings, linkCache: linkCache, cfg: cfg}
+	linkSvc := service.NewLinkService(links, analytics, hostnames, teams, settings, linkCache, cfg.defaultHostname, cfg.retentionDays)
+	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, invites: invites, settings: settings, linkCache: linkCache, linkSvc: linkSvc, cfg: cfg}
 
 	go func() {
 		warm(ctx, links, linkCache)
@@ -109,7 +114,7 @@ func main() {
 
 	mux := s.routes()
 	log.Printf("api listening on %s", cfg.addr)
-	log.Fatal(http.ListenAndServe(cfg.addr, s.auth(mux)))
+	log.Fatal(http.ListenAndServe(cfg.addr, s.internalHeader(s.auth(mux))))
 }
 
 // routes registers every API route on a fresh mux.
@@ -244,80 +249,24 @@ func (s *server) hostname(r *http.Request) string {
 	return s.cfg.defaultHostname
 }
 
-// canReadLink reports whether the current user may see a link. Personal links
-// are visible only to their creator. Team links are visible to any member of
-// the team and to admins (as instance oversight); a creator who left the team
-// is an outsider and loses access.
-func (s *server) canReadLink(r *http.Request, l *domain.Link) bool {
-	u := currentUser(r)
-	if u == nil {
-		return false
-	}
-	if l.TeamID == nil {
-		return l.CreatedBy == u.ID
-	}
-	if u.IsAdmin {
-		return true
-	}
-	_, err := s.teams.MemberRole(r.Context(), *l.TeamID, u.ID)
-	return err == nil
-}
-
-// canManageLink reports whether the current user may edit, disable, or delete
-// a link: its creator (while a member of its team), or a Team Owner of its
-// team. Admins manage team links only through an actual Team Owner role.
-func (s *server) canManageLink(r *http.Request, l *domain.Link) bool {
-	u := currentUser(r)
-	if u == nil {
-		return false
-	}
-	if l.TeamID == nil {
-		return l.CreatedBy == u.ID
-	}
-	role, err := s.teams.MemberRole(r.Context(), *l.TeamID, u.ID)
-	if err != nil {
-		return false
-	}
-	return role == domain.RoleOwner || l.CreatedBy == u.ID
-}
-
-// accessibleLink loads a link and enforces read access for the current user.
-func (s *server) accessibleLink(w http.ResponseWriter, r *http.Request, code string) (*domain.Link, bool) {
-	l, err := s.links.Get(r.Context(), s.hostname(r), code)
-	if err != nil {
-		writeStoreError(w, err)
-		return nil, false
-	}
-	if !s.canReadLink(r, l) {
+// writeServiceError maps a LinkService error to an HTTP response.
+func (s *server) writeServiceError(w http.ResponseWriter, err error) {
+	var ve *service.ValidationError
+	switch {
+	case errors.Is(err, service.ErrNotFound):
 		writeError(w, http.StatusNotFound, "link not found")
-		return nil, false
-	}
-	return l, true
-}
-
-// manageableLink loads a link and enforces manage access for the current
-// user. A user who can read but not manage gets 403; a user with no access
-// gets 404 so link existence is not leaked.
-func (s *server) manageableLink(w http.ResponseWriter, r *http.Request, code string) (*domain.Link, bool) {
-	l, err := s.links.Get(r.Context(), s.hostname(r), code)
-	if err != nil {
-		writeStoreError(w, err)
-		return nil, false
-	}
-	if s.canManageLink(r, l) {
-		return l, true
-	}
-	if s.canReadLink(r, l) {
+	case errors.Is(err, service.ErrForbidden):
 		writeError(w, http.StatusForbidden, "insufficient permissions")
-		return nil, false
+	case errors.As(err, &ve):
+		writeError(w, http.StatusBadRequest, ve.Msg)
+	default:
+		writeError(w, http.StatusInternalServerError, "internal error")
 	}
-	writeError(w, http.StatusNotFound, "link not found")
-	return nil, false
 }
 
 // createLinkInScope validates the create-link request and persists the link,
 // scoped to a Team (teamID non-nil) or Personal (teamID nil).
-func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamID *int64, creatorID int64) {
+func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamID *int64) {
 	var req struct {
 		Hostname    string `json:"hostname"`
 		Destination string `json:"destination"`
@@ -328,71 +277,34 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	hostname := req.Hostname
-	if hostname == "" {
-		hostname = s.cfg.defaultHostname
-	}
-	hostname, err := domain.NormalizeAndValidateHostname(hostname)
+	l, err := s.linkSvc.CreateLink(r.Context(), teamID, currentUser(r).ID, service.CreateLinkInput{
+		Hostname:    req.Hostname,
+		Destination: req.Destination,
+		Remark:      req.Remark,
+		ForwardUTM:  req.ForwardUTM,
+	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		s.writeServiceError(w, err)
 		return
 	}
-	if _, err := s.hostnames.Get(r.Context(), hostname); err != nil {
-		writeError(w, http.StatusBadRequest, "hostname is not registered")
-		return
-	}
-	dest, err := domain.NormalizeAndValidateDestination(req.Destination)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	remark, err := domain.NormalizeRemark(req.Remark)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	codeLength, err := s.settings.CodeLength(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to read settings")
-		return
-	}
-
-	for attempt := 0; attempt < 8; attempt++ {
-		code, err := domain.GenerateCode(codeLength)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "code generation failed")
-			return
-		}
-		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, ForwardUTM: req.ForwardUTM, CreatedBy: creatorID, TeamID: teamID}
-		if err := s.links.Create(r.Context(), l); err == nil {
-			s.linkCache.Put(r.Context(), l)
-			writeJSON(w, http.StatusCreated, l)
-			return
-		} else if errors.Is(err, store.ErrDuplicatedKey) {
-			continue // auto codes never reuse an existing code
-		} else {
-			writeError(w, http.StatusInternalServerError, "failed to create link")
-			return
-		}
-	}
-	writeError(w, http.StatusInternalServerError, "could not allocate a unique code")
+	writeJSON(w, http.StatusCreated, l)
 }
 
 func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
-	s.createLinkInScope(w, r, nil, currentUser(r).ID)
+	s.createLinkInScope(w, r, nil)
 }
 
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
-	l, ok := s.accessibleLink(w, r, r.PathValue("code"))
-	if !ok {
+	l, err := s.linkSvc.GetLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"))
+	if err != nil {
+		s.writeServiceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, l)
 }
 
 func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
-	links, err := s.links.List(r.Context(), s.hostname(r), currentUser(r).ID)
+	links, err := s.linkSvc.ListLinks(r.Context(), s.hostname(r), currentUser(r).ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
@@ -414,46 +326,24 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	dest, err := domain.NormalizeAndValidateDestination(req.Destination)
+	l, err := s.linkSvc.UpdateLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"), service.UpdateLinkInput{
+		Destination: req.Destination,
+		Remark:      req.Remark,
+		ForwardUTM:  req.ForwardUTM,
+	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		s.writeServiceError(w, err)
 		return
 	}
-	remark, err := domain.NormalizeRemark(req.Remark)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	l, ok := s.manageableLink(w, r, r.PathValue("code"))
-	if !ok {
-		return
-	}
-	l.Destination = dest
-	l.Remark = remark
-	if req.ForwardUTM != nil {
-		l.ForwardUTM = *req.ForwardUTM
-	}
-	if err := s.links.Save(r.Context(), l); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to update link")
-		return
-	}
-	s.linkCache.Put(r.Context(), l)
 	writeJSON(w, http.StatusOK, l)
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
-	l, ok := s.manageableLink(w, r, r.PathValue("code"))
-	if !ok {
+	l, err := s.linkSvc.SetDisabled(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code"), disabled)
+	if err != nil {
+		s.writeServiceError(w, err)
 		return
 	}
-	l.Disabled = disabled
-	if err := s.links.Save(r.Context(), l); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to update link")
-		return
-	}
-	// Put handles both directions: active links are cached, disabled ones are
-	// evicted so the redirector 404s them.
-	s.linkCache.Put(r.Context(), l)
 	writeJSON(w, http.StatusOK, l)
 }
 
@@ -466,16 +356,10 @@ func (s *server) enableLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteLink(w http.ResponseWriter, r *http.Request) {
-	hostname := s.hostname(r)
-	code := r.PathValue("code")
-	if _, ok := s.manageableLink(w, r, code); !ok {
+	if err := s.linkSvc.DeleteLink(r.Context(), currentUser(r), s.hostname(r), r.PathValue("code")); err != nil {
+		s.writeServiceError(w, err)
 		return
 	}
-	if err := s.links.Delete(r.Context(), hostname, code); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to delete link")
-		return
-	}
-	s.linkCache.Delete(r.Context(), hostname, code)
 	w.WriteHeader(http.StatusNoContent)
 }
 

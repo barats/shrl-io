@@ -175,10 +175,26 @@ _Avoid_: secret
 
 **API Key**:
 A long-lived bearer credential a `User` creates, names, and revokes for
-programmatic access to the API. Presented as `Authorization: Bearer` like a
-`Token`, but never expires and is never shown again after creation. Currently
-unscoped: a Key grants the same powers as its owner's `Login`.
+programmatic access to the `Auth API`. Presented as `Authorization: Bearer`
+on every request; never expires and never shown again after creation. Scoped
+to the `Auth API`: a Key grants the same powers over `Link`s as its owner's
+`Login`, except that the `Auth API` never deletes.
 _Avoid_: PAT, secret
+
+**Internal API**:
+The API that serves the UI. Reachable only by the UI's server (the frontend),
+which proxies every request on the signed-in `User`'s behalf and presents the
+`Session`'s `Token`; no external caller can reach it. Distinct from the
+`Auth API`.
+_Avoid_: backend API, admin API
+
+**Auth API**:
+The public API for programmatic access. Any caller may reach it, but every
+request must present a valid `API Key`. Serves every `Link` operation except
+deletion, for both `Personal Link`s and `Team Link`s, under the same
+permissions as the key's owner's `Login`. Distinct from the `Internal API`,
+which the UI uses.
+_Avoid_: public API, external API
 
 **Session**:
 An authenticated browser context for a `User` in the UI, established by a

@@ -12,14 +12,10 @@ import (
 // listHostnames returns the Hostname Registry — every registered hostname,
 // available to any authenticated user for the create-link select.
 func (s *server) listHostnames(w http.ResponseWriter, r *http.Request) {
-	hostnames, err := s.hostnames.List(r.Context())
+	names, err := s.linkSvc.ListHostnames(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list hostnames")
 		return
-	}
-	names := make([]string, 0, len(hostnames))
-	for _, h := range hostnames {
-		names = append(names, h.Name)
 	}
 	writeJSON(w, http.StatusOK, names)
 }
