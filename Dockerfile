@@ -1,6 +1,4 @@
 FROM golang:1.25-alpine AS build
-ARG GOPROXY=https://goproxy.cn,direct
-ENV GOPROXY=$GOPROXY
 # -p caps parallel package compiles so the build fits in small-memory hosts.
 ENV GOFLAGS="-p=2"
 WORKDIR /src
