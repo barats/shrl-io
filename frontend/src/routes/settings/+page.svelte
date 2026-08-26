@@ -255,6 +255,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Settings — shrl.io</title>
+</svelte:head>
+
 <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 <p class="mt-1 text-sm text-muted-foreground">
 	Instance administration: Code length, Hostnames, accounts, and Teams.

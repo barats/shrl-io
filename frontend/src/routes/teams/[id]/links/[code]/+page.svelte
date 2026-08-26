@@ -148,6 +148,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>{hostname ? `${hostname}/${code}` : 'Link'} — shrl.io</title>
+</svelte:head>
+
 {#if loading}
 	<div class="space-y-4">
 		<Skeleton class="h-8 w-64" />

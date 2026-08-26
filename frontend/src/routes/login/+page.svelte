@@ -36,6 +36,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Sign in — shrl.io</title>
+</svelte:head>
+
 <div class="flex min-h-[70vh] items-center justify-center">
 	<Card class="w-full max-w-sm">
 		<CardHeader>

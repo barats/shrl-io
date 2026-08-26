@@ -206,6 +206,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>{team?.name ?? 'Team'} — shrl.io</title>
+</svelte:head>
+
 {#if loading}
 	<div class="space-y-4">
 		<Skeleton class="h-8 w-64" />

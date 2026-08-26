@@ -63,6 +63,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Links — shrl.io</title>
+</svelte:head>
+
 <div class="flex flex-wrap items-center justify-between gap-3">
 	<h1 class="text-2xl font-semibold tracking-tight">Links</h1>
 	<Button onclick={() => (createOpen = true)}>

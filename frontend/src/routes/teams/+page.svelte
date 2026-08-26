@@ -71,6 +71,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Teams — shrl.io</title>
+</svelte:head>
+
 <h1 class="text-2xl font-semibold tracking-tight">Teams</h1>
 
 <div class="mt-4 grid gap-6 lg:grid-cols-3">

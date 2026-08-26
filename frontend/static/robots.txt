@@ -1,3 +1,3 @@
-# allow crawling everything by default
+# deny all bots: the frontend is a private admin UI, not a public site
 User-agent: *
-Disallow:
+Disallow: /

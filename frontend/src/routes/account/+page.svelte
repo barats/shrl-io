@@ -127,6 +127,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Account — shrl.io</title>
+</svelte:head>
+
 <h1 class="text-2xl font-semibold tracking-tight">Account</h1>
 <p class="mt-1 text-sm text-muted-foreground">
 	Your password and API keys for programmatic access.
