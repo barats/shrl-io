@@ -127,7 +127,7 @@
 		if (!window.confirm(`Delete ${link.hostname}/${code}? This cannot be undone.`)) return;
 		try {
 			await api.deleteLink(code);
-			await goto('/');
+			await goto('/links');
 		} catch (e) {
 			error = (e as Error).message;
 		}

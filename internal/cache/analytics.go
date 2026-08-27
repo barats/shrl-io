@@ -56,6 +56,10 @@ func uvKey(code string, day time.Time) string {
 	return uvKeyPrefix + code + ":" + day.Format("2006-01-02")
 }
 
+func uvDimKey(code string, day time.Time, dimension, value string) string {
+	return uvKeyPrefix + "d:" + code + ":" + day.Format("2006-01-02") + ":" + dimension + ":" + value
+}
+
 // AddUniqueVisitor records a hashed visitor identity for a link on a day and
 // reports whether it is new (the SADD returned 1). The per-day set persists
 // for 48h so dedup works across worker batches.
@@ -75,6 +79,28 @@ func (c *AnalyticsCache) AddUniqueVisitor(ctx context.Context, code string, day 
 // redelivered batch counts the visitor as new again.
 func (c *AnalyticsCache) RemoveUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) error {
 	return c.rdb.SRem(ctx, uvKey(code, day), hash).Err()
+}
+
+// AddUniqueVisitorDim records a hashed visitor identity for a link on a day
+// within one dimension value and reports whether it is new. Each (code, day,
+// dimension, value) has its own set, so a visitor who appears under several
+// values (e.g. multiple referrers) is counted once per value.
+func (c *AnalyticsCache) AddUniqueVisitorDim(ctx context.Context, code string, day time.Time, dimension, value, hash string) (bool, error) {
+	key := uvDimKey(code, day, dimension, value)
+	added, err := c.rdb.SAdd(ctx, key, hash).Result()
+	if err != nil {
+		return false, err
+	}
+	if added == 1 {
+		c.rdb.Expire(ctx, key, uvSetTTL)
+	}
+	return added == 1, nil
+}
+
+// RemoveUniqueVisitorDim undoes a dimension-scoped dedup addition after a
+// failed DB apply.
+func (c *AnalyticsCache) RemoveUniqueVisitorDim(ctx context.Context, code string, day time.Time, dimension, value, hash string) error {
+	return c.rdb.SRem(ctx, uvDimKey(code, day, dimension, value), hash).Err()
 }
 
 // EnsureVisitGroup creates the visits consumer group from the stream start so

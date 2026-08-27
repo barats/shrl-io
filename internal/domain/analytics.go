@@ -13,13 +13,16 @@ type DailyStats struct {
 }
 
 // Breakdown is one dimension value per link per day (referrer, device, os,
-// browser). Rows are pruned with the retention window.
+// browser, location, utm_*). Count is visit totals; UniqueVisitors is the
+// number of distinct visitor hashes seen for this dimension value. Rows are
+// pruned with the retention window.
 type Breakdown struct {
-	Code      string    `json:"code" gorm:"primaryKey"`
-	Day       time.Time `json:"day" gorm:"primaryKey;type:date"`
-	Dimension string    `json:"dimension" gorm:"primaryKey"`
-	Value     string    `json:"value" gorm:"primaryKey"`
-	Count     int64     `json:"count"`
+	Code           string    `json:"code" gorm:"primaryKey"`
+	Day            time.Time `json:"day" gorm:"primaryKey;type:date"`
+	Dimension      string    `json:"dimension" gorm:"primaryKey"`
+	Value          string    `json:"value" gorm:"primaryKey"`
+	Count          int64     `json:"count"`
+	UniqueVisitors int64     `json:"unique_visitors"`
 }
 
 // LifetimeStats is the per-link total that survives pruning, so the "total

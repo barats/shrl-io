@@ -1,192 +1,307 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { api, daysAgo } from '$lib/api';
-	import type { Link, Stats } from '$lib/types';
-	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import {
-		Card,
-		CardContent,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import {
-		Table,
-		TableBody,
-		TableCell,
-		TableHead,
-		TableHeader,
-		TableRow
-	} from '$lib/components/ui/table';
-	import { Link2, Plus, TriangleAlert } from '@lucide/svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { api } from '$lib/api';
+	import BreakdownDialog, { type BreakdownDialogConfig } from '$lib/components/BreakdownDialog.svelte';
+	import RangeSelect from '$lib/components/RangeSelect.svelte';
+	import RankCard from '$lib/components/RankCard.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
-	import CreateLinkDialog from '$lib/components/CreateLinkDialog.svelte';
+	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+	import { Button } from '$lib/components/ui/button';
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { countryLabel } from '$lib/countries';
+	import {
+		bucketTimeseries,
+		isRangePreset,
+		presetLabel,
+		rangeForPreset,
+		type DateRange,
+		type RangePreset
+	} from '$lib/dashboard';
+	import type { DashboardBreakdownItem, DashboardStats, DashboardTopLink } from '$lib/types';
+	import { Link2, Plus, TriangleAlert } from '@lucide/svelte';
 
-	let hostnames = $state<string[]>([]);
-	let defaultHostname = $state('');
-	let links = $state<Link[]>([]);
-	let stats = $state<Stats | null>(null);
+	const RANGE_KEY = 'shrl:range:preset';
+
+	let data = $state<DashboardStats | null>(null);
+	let range = $state<DateRange>(rangeForPreset('7d'));
 	let loading = $state(true);
 	let error = $state('');
-	let createOpen = $state(false);
+	let envTab = $state('browser');
+	let locTab = $state('country');
+	let topTab = $state<'visits' | 'visitors'>('visits');
+	let dialog = $state<BreakdownDialogConfig | null>(null);
 
-	onMount(async () => {
+	// The URL query is the single source of truth for the range; the effect
+	// rebuilds the range and refetches on mount, on selection, and on
+	// back/forward navigation.
+	$effect(() => {
+		const sp = page.url.searchParams;
+		const preset = sp.get('preset');
+		const from = sp.get('from');
+		const to = sp.get('to');
+		let next: DateRange;
+		if (from && to) {
+			next = { preset: 'custom', from, to };
+		} else if (preset && isRangePreset(preset)) {
+			next = rangeForPreset(preset as RangePreset);
+		} else {
+			const saved = localStorage.getItem(RANGE_KEY);
+			const p = saved && isRangePreset(saved) ? (saved as RangePreset) : '7d';
+			next = rangeForPreset(p);
+		}
+		range = next;
+		load(next);
+	});
+
+	async function load(r: DateRange) {
+		error = '';
 		try {
-			const cfg = await api.config();
-			const hs = await api.hostnames();
-			hostnames = [...new Set([cfg.defaultHostname, ...hs])].sort();
-			defaultHostname = cfg.defaultHostname;
-			await Promise.all([loadStats(), loadLinks()]);
+			data = await api.getDashboard(r.from, r.to);
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
 			loading = false;
 		}
-	});
-
-	async function loadStats() {
-		try {
-			stats = await api.getStats(daysAgo(30));
-		} catch (e) {
-			error = (e as Error).message;
-		}
 	}
 
-	async function loadLinks() {
-		try {
-			links = await api.listLinks();
-		} catch (e) {
-			error = (e as Error).message;
+	function applyRange(r: DateRange) {
+		const url = new URL(page.url);
+		if (r.preset === 'custom') {
+			url.searchParams.set('from', r.from);
+			url.searchParams.set('to', r.to);
+			url.searchParams.delete('preset');
+		} else {
+			url.searchParams.set('preset', r.preset);
+			url.searchParams.delete('from');
+			url.searchParams.delete('to');
+			localStorage.setItem(RANGE_KEY, r.preset);
 		}
+		goto(url.pathname + url.search, { keepFocus: true });
+	}
+
+	const visitsCard = $derived(
+		range.preset === 'all' ? (data?.lifetime_visits ?? 0) : (data?.window_visits ?? 0)
+	);
+
+	function topItems(links: DashboardTopLink[]): DashboardBreakdownItem[] {
+		return links.map((l) => ({
+			value: `${l.hostname}/${l.code}`,
+			visits: l.visits,
+			unique_visitors: l.unique_visitors
+		}));
+	}
+
+	function topHrefs(links: DashboardTopLink[]): Record<string, string> {
+		const out: Record<string, string> = {};
+		for (const l of links) {
+			out[`${l.hostname}/${l.code}`] = `/links/${encodeURIComponent(l.code)}`;
+		}
+		return out;
+	}
+
+	function openTopLinksDialog() {
+		dialog = {
+			title: `Top Links — ${topTab}`,
+			metric: topTab,
+			fetcher: async () => {
+				const links = await api.getTopLinks(range.from, range.to, topTab, 0);
+				const hrefs: Record<string, string> = {};
+				const items = links.map((l) => {
+					hrefs[`${l.hostname}/${l.code}`] = `/links/${encodeURIComponent(l.code)}`;
+					return {
+						value: `${l.hostname}/${l.code}`,
+						visits: l.visits,
+						unique_visitors: l.unique_visitors
+					};
+				});
+				return { items, hrefs };
+			}
+		};
+	}
+
+	function openSourcesDialog() {
+		dialog = {
+			title: 'Sources',
+			fetcher: async () => ({
+				items: (await api.getStatsBreakdowns('referrer', range.from, range.to, 0)).items
+			})
+		};
+	}
+
+	function openEnvDialog() {
+		dialog = {
+			title: `Environment — ${envTab}`,
+			fetcher: async () => ({
+				items: (await api.getStatsBreakdowns(envTab, range.from, range.to, 0)).items
+			})
+		};
+	}
+
+	function openLocDialog() {
+		dialog = {
+			title: `Location — ${locTab}`,
+			valueFormatter: (v) => (locTab === 'country' ? countryLabel(v) : v),
+			fetcher: async () => ({
+				items: (await api.getStatsBreakdowns(locTab, range.from, range.to, 0)).items
+			})
+		};
 	}
 </script>
 
 <svelte:head>
-	<title>Links — shrl.io</title>
+	<title>Dashboard — shrl.io</title>
 </svelte:head>
 
 <div class="flex flex-wrap items-center justify-between gap-3">
-	<h1 class="text-2xl font-semibold tracking-tight">Links</h1>
-	<Button onclick={() => (createOpen = true)}>
-		<Plus class="size-4" /> Create Link
-	</Button>
+	<h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+	<RangeSelect value={range} onchange={applyRange} />
 </div>
 
 {#if error}
 	<Alert variant="destructive" class="mt-4">
 		<TriangleAlert class="size-4" />
-		<AlertTitle>Failed to load Links</AlertTitle>
+		<AlertTitle>Failed to load dashboard</AlertTitle>
 		<AlertDescription>{error}</AlertDescription>
 	</Alert>
 {/if}
 
 <div class="mt-4 space-y-6">
-	{#if loading}
-		<div class="grid grid-cols-3 gap-4">
-			{#each [0, 1, 2] as i (i)}
+	{#if loading && !data}
+		<div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+			{#each [0, 1, 2, 3, 4] as i (i)}
 				<Skeleton class="h-24 w-full" />
 			{/each}
 		</div>
 		<Skeleton class="h-48 w-full" />
-	{:else}
-		<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+		<div class="grid gap-6 lg:grid-cols-2">
+			<Skeleton class="h-64 w-full" />
+			<Skeleton class="h-64 w-full" />
+		</div>
+		<div class="grid gap-6 lg:grid-cols-2">
+			<Skeleton class="h-64 w-full" />
+			<Skeleton class="h-64 w-full" />
+		</div>
+	{:else if data && data.total_links === 0}
+		<Card class="mx-auto mt-10 max-w-md">
+			<CardContent class="flex flex-col items-center gap-3 py-10 text-center">
+				<Link2 class="size-8 text-muted-foreground" />
+				<h2 class="text-lg font-semibold">Welcome to shrl.io</h2>
+				<p class="text-sm text-muted-foreground">
+					Create your first link to start seeing analytics here.
+				</p>
+				<Button href="/links">
+					<Plus class="size-4" /> Create Link
+				</Button>
+			</CardContent>
+		</Card>
+	{:else if data}
+		<!-- Row 1: stats cards. Total/Active/Disabled are current state and
+		     ignore the range; Visits/Visitors are range-scoped. -->
+		<div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
 			<Card>
 				<CardHeader class="pb-2">
 					<CardTitle class="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
 				</CardHeader>
 				<CardContent class="pt-0">
-					<p class="text-2xl font-semibold">{stats?.total_links ?? 0}</p>
+					<p class="text-2xl font-semibold">{data.total_links}</p>
 				</CardContent>
 			</Card>
 			<Card>
 				<CardHeader class="pb-2">
-					<CardTitle class="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
+					<CardTitle class="text-sm font-medium text-muted-foreground">Active</CardTitle>
 				</CardHeader>
 				<CardContent class="pt-0">
-					<p class="text-2xl font-semibold">{stats?.total_visits ?? 0}</p>
+					<p class="text-2xl font-semibold">{data.active_links}</p>
 				</CardContent>
 			</Card>
 			<Card>
 				<CardHeader class="pb-2">
-					<CardTitle class="text-sm font-medium text-muted-foreground">Unique Visitors</CardTitle>
+					<CardTitle class="text-sm font-medium text-muted-foreground">Disabled</CardTitle>
 				</CardHeader>
 				<CardContent class="pt-0">
-					<p class="text-2xl font-semibold">{stats?.window_uniques ?? 0}</p>
-					<p class="text-xs text-muted-foreground">last 30 days</p>
+					<p class="text-2xl font-semibold">{data.disabled_links}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Visits</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{visitsCard}</p>
+					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Visitors</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{data.window_uniques}</p>
+					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
 				</CardContent>
 			</Card>
 		</div>
 
+		<!-- Row 2: visits & visitors chart -->
 		<Card>
 			<CardHeader>
-				<CardTitle>Visits & Visitors (last 30 days)</CardTitle>
+				<CardTitle>Visits & Visitors ({presetLabel(range.preset)})</CardTitle>
 			</CardHeader>
 			<CardContent>
-				<StatsChart rows={stats?.timeseries ?? []} />
+				<StatsChart rows={bucketTimeseries(data.timeseries, range.from, range.to)} />
 			</CardContent>
 		</Card>
 
-		<Card>
-			<CardHeader>
-				<CardTitle>All Links</CardTitle>
-			</CardHeader>
-			<CardContent>
-				{#if links.length === 0}
-					<p class="py-8 text-center text-sm text-muted-foreground">
-						No Links yet. Create one with the button above.
-					</p>
-				{:else}
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Link</TableHead>
-								<TableHead>Destination</TableHead>
-								<TableHead class="w-24">Status</TableHead>
-								<TableHead class="w-36">Created</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{#each links as link (link.code)}
-								<TableRow>
-									<TableCell class="font-medium">
-										<a
-											href={`/links/${encodeURIComponent(link.code)}`}
-											class="inline-flex items-center gap-1.5 text-primary hover:underline"
-										>
-											<Link2 class="size-3.5" />
-											{link.hostname}/{link.code}
-										</a>
-									</TableCell>
-									<TableCell class="max-w-72 truncate text-muted-foreground">
-										{link.destination}
-									</TableCell>
-									<TableCell>
-										{#if link.disabled}
-											<Badge variant="secondary">Disabled</Badge>
-										{:else}
-											<Badge>Active</Badge>
-										{/if}
-									</TableCell>
-									<TableCell class="text-muted-foreground">
-										{link.created_at.slice(0, 10)}
-									</TableCell>
-								</TableRow>
-							{/each}
-						</TableBody>
-					</Table>
-				{/if}
-			</CardContent>
-		</Card>
+		<!-- Row 3: top links + sources -->
+		<div class="grid gap-6 lg:grid-cols-2">
+			<RankCard
+				title="Top Links"
+				items={topItems(topTab === 'visits' ? data.top_by_visits : data.top_by_visitors)}
+				hrefs={topHrefs(topTab === 'visits' ? data.top_by_visits : data.top_by_visitors)}
+				tabs={['visits', 'visitors']}
+				active={topTab}
+				onTabChange={(t) => (topTab = t as 'visits' | 'visitors')}
+				metric={topTab}
+				onMore={openTopLinksDialog}
+			/>
+			<RankCard
+				title="Sources"
+				items={data.sources ?? []}
+				metric="visitors"
+				onMore={openSourcesDialog}
+			/>
+		</div>
+
+		<!-- Row 4: environment + location -->
+		<div class="grid gap-6 lg:grid-cols-2">
+			<RankCard
+				title="Environment"
+				items={data.environment[envTab] ?? []}
+				tabs={['browser', 'os', 'device']}
+				active={envTab}
+				onTabChange={(t) => (envTab = t)}
+				metric="visitors"
+				onMore={openEnvDialog}
+			/>
+			<RankCard
+				title="Location"
+				items={data.location[locTab] ?? []}
+				tabs={['country', 'region', 'city']}
+				active={locTab}
+				onTabChange={(t) => (locTab = t)}
+				metric="visitors"
+				valueFormatter={(v) => (locTab === 'country' ? countryLabel(v) : v)}
+				onMore={openLocDialog}
+			/>
+		</div>
 	{/if}
 </div>
 
-<CreateLinkDialog
-	bind:open={createOpen}
-	{hostnames}
-	{defaultHostname}
-	onCreated={async () => {
-		await Promise.all([loadStats(), loadLinks()]);
-	}}
+<BreakdownDialog
+	open={dialog !== null}
+	config={dialog}
+	rangeKey={`${range.from}:${range.to}`}
+	onclose={() => (dialog = null)}
 />

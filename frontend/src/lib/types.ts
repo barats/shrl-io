@@ -99,6 +99,50 @@ export interface Stats {
 	timeseries: TimeseriesRow[];
 }
 
+// One link's window totals on the dashboard (top links rankings).
+export interface DashboardTopLink {
+	code: string;
+	hostname: string;
+	visits: number;
+	unique_visitors: number;
+}
+
+// One dimension value's window totals (environment/location breakdowns).
+export interface DashboardBreakdownItem {
+	value: string;
+	visits: number;
+	unique_visitors: number;
+}
+
+// A dimension group keyed by sub-tab, e.g. environment.browser.
+export type DashboardBreakdownGroup = Record<string, DashboardBreakdownItem[]>;
+
+// The full personal dashboard model (GET /dashboard): every row reacts to the
+// same from/to window.
+export interface DashboardStats {
+	total_links: number;
+	active_links: number;
+	disabled_links: number;
+	lifetime_visits: number;
+	window_visits: number;
+	window_uniques: number;
+	timeseries: TimeseriesRow[];
+	top_by_visits: DashboardTopLink[];
+	top_by_visitors: DashboardTopLink[];
+	sources: DashboardBreakdownItem[];
+	environment: DashboardBreakdownGroup;
+	location: DashboardBreakdownGroup;
+}
+
+// An aggregate dimension breakdown across the caller's links (GET
+// /stats/breakdowns) — the dashboard "More" dialog's data source.
+export interface StatsBreakdown {
+	dimension: string;
+	total: number;
+	items: DashboardBreakdownItem[];
+	other: number;
+}
+
 export const DIMENSIONS = [
 	'referrer',
 	'device',

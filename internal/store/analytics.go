@@ -21,9 +21,12 @@ func NewAnalyticsStore(db *gorm.DB) *AnalyticsStore { return &AnalyticsStore{db:
 func (s *AnalyticsStore) Migrate(ctx context.Context) error {
 	// ADR 0019: rollups are keyed by Code alone; the legacy (Hostname, Code)
 	// keys cannot be altered in place by GORM, and existing data was cleared
-	// by decision, so tables still carrying the composite key are rebuilt.
+	// by decision, so tables still carrying the legacy hostname key are
+	// rebuilt. Only the legacy key triggers a rebuild: the current rollups
+	// key by Code (+ Day / dimension / value), which are legitimate composite
+	// keys and must survive restarts.
 	for _, dst := range []any{&domain.DailyStats{}, &domain.Breakdown{}, &domain.LifetimeStats{}} {
-		if s.db.WithContext(ctx).Migrator().HasTable(dst) && hasCompositeAnalyticsKey(s.db, dst) {
+		if s.db.WithContext(ctx).Migrator().HasTable(dst) && hasLegacyAnalyticsKey(s.db, dst) {
 			if err := s.db.WithContext(ctx).Migrator().DropTable(dst); err != nil {
 				return err
 			}
@@ -36,21 +39,24 @@ func (s *AnalyticsStore) Migrate(ctx context.Context) error {
 	)
 }
 
-// hasCompositeAnalyticsKey reports whether an analytics table still uses the
-// legacy (Hostname, Code, ...) primary key, i.e. more than one column is a
-// primary key.
-func hasCompositeAnalyticsKey(db *gorm.DB, dst any) bool {
+// hasLegacyAnalyticsKey reports whether an analytics table still uses the
+// legacy (Hostname, Code, ...) primary key, i.e. a hostname column that is
+// part of the primary key. The current composite keys (Code+Day,
+// Code+Day+dimension+value) have no hostname and are not legacy.
+func hasLegacyAnalyticsKey(db *gorm.DB, dst any) bool {
 	cols, err := db.Migrator().ColumnTypes(dst)
 	if err != nil {
 		return false
 	}
-	keys := 0
 	for _, c := range cols {
+		if c.Name() != "hostname" {
+			continue
+		}
 		if pk, ok := c.PrimaryKey(); ok && pk {
-			keys++
+			return true
 		}
 	}
-	return keys > 1
+	return false
 }
 
 // DailyIncrement, LifetimeIncrement, and BreakdownIncrement are the deltas a
@@ -73,12 +79,27 @@ type BreakdownIncrement struct {
 	Dimension string
 	Value     string
 	Count     int64
+	Uniques   int64
 }
 
 // BreakdownTotal is a dimension value summed across a window.
 type BreakdownTotal struct {
 	Value string
 	Total int64
+}
+
+// BreakdownValues is a dimension value's window totals across a set of codes.
+type BreakdownValues struct {
+	Value   string
+	Visits  int64
+	Uniques int64
+}
+
+// CodeTotals is one link's window totals, used for ranking links.
+type CodeTotals struct {
+	Code    string
+	Visits  int64
+	Uniques int64
 }
 
 // ApplyAnalytics upserts a batch of increments in one transaction. Updates are
@@ -138,11 +159,12 @@ func upsertBreakdown(tx *gorm.DB, b BreakdownIncrement) error {
 	return tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "code"}, {Name: "day"}, {Name: "dimension"}, {Name: "value"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"count": gorm.Expr(`"breakdowns"."count" + ?`, b.Count),
+			"count":           gorm.Expr(`"breakdowns"."count" + ?`, b.Count),
+			"unique_visitors": gorm.Expr(`"breakdowns"."unique_visitors" + ?`, b.Uniques),
 		}),
 	}).Create(&domain.Breakdown{
 		Code: b.Code, Day: b.Day,
-		Dimension: b.Dimension, Value: b.Value, Count: b.Count,
+		Dimension: b.Dimension, Value: b.Value, Count: b.Count, UniqueVisitors: b.Uniques,
 	}).Error
 }
 
@@ -238,6 +260,40 @@ func (s *AnalyticsStore) GetTimeseriesForCodes(ctx context.Context, codes []stri
 		Where("code IN ? AND day >= ? AND day <= ?", codes, from, to).
 		Group("day").Order("day ASC").
 		Scan(&rows).Error
+	return rows, err
+}
+
+// SumDailyStatsByCode returns per-link window totals (visits and unique
+// visitors) for ranking links within a window.
+func (s *AnalyticsStore) SumDailyStatsByCode(ctx context.Context, codes []string, from, to time.Time) ([]CodeTotals, error) {
+	if len(codes) == 0 {
+		return nil, nil
+	}
+	var rows []CodeTotals
+	err := s.db.WithContext(ctx).Model(&domain.DailyStats{}).
+		Select("code, SUM(visits) AS visits, SUM(unique_visitors) AS uniques").
+		Where("code IN ? AND day >= ? AND day <= ?", codes, from, to).
+		Group("code").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// GetBreakdownsForCodes returns the top-N dimension values by unique visitors
+// (then visits) within a window, summed across the given codes. A limit <= 0
+// returns every distinct value.
+func (s *AnalyticsStore) GetBreakdownsForCodes(ctx context.Context, codes []string, dimension string, from, to time.Time, limit int) ([]BreakdownValues, error) {
+	if len(codes) == 0 {
+		return nil, nil
+	}
+	var rows []BreakdownValues
+	q := s.db.WithContext(ctx).Model(&domain.Breakdown{}).
+		Select("value, SUM(count) AS visits, SUM(unique_visitors) AS uniques").
+		Where("code IN ? AND dimension = ? AND day >= ? AND day <= ?", codes, dimension, from, to).
+		Group("value").Order("uniques DESC, visits DESC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	err := q.Scan(&rows).Error
 	return rows, err
 }
 

@@ -162,3 +162,73 @@ func TestAnalyticsStoreAggregatesAcrossCodes(t *testing.T) {
 		t.Fatalf("empty codes sum = %d/%d, %v", v, u, err)
 	}
 }
+
+func TestAnalyticsStoreDashboardQueries(t *testing.T) {
+	db := newTestDB(t)
+	s := NewAnalyticsStore(db)
+	ctx := context.Background()
+
+	day1 := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	day2 := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+
+	seed := []*domain.DailyStats{
+		{Code: "aaa", Day: day1, Visits: 5, UniqueVisitors: 3},
+		{Code: "aaa", Day: day2, Visits: 7, UniqueVisitors: 4},
+		{Code: "bbb", Day: day1, Visits: 20, UniqueVisitors: 2},
+	}
+	for _, d := range seed {
+		if err := db.Create(d).Error; err != nil {
+			t.Fatalf("seed daily: %v", err)
+		}
+	}
+	_ = db.Create(&domain.Breakdown{Code: "aaa", Day: day1, Dimension: "browser", Value: "Chrome", Count: 10, UniqueVisitors: 4})
+	_ = db.Create(&domain.Breakdown{Code: "bbb", Day: day1, Dimension: "browser", Value: "Chrome", Count: 5, UniqueVisitors: 3})
+	_ = db.Create(&domain.Breakdown{Code: "bbb", Day: day1, Dimension: "browser", Value: "Safari", Count: 2, UniqueVisitors: 2})
+	_ = db.Create(&domain.Breakdown{Code: "other", Day: day1, Dimension: "browser", Value: "Chrome", Count: 999, UniqueVisitors: 999})
+
+	// per-link window totals for ranking
+	totals, err := s.SumDailyStatsByCode(ctx, []string{"aaa", "bbb"}, day1, day2)
+	if err != nil {
+		t.Fatalf("sum by code: %v", err)
+	}
+	if len(totals) != 2 {
+		t.Fatalf("totals len = %d, want 2", len(totals))
+	}
+	byCode := map[string]CodeTotals{}
+	for _, r := range totals {
+		byCode[r.Code] = r
+	}
+	if byCode["aaa"].Visits != 12 || byCode["aaa"].Uniques != 7 {
+		t.Errorf("aaa totals = %+v, want 12/7", byCode["aaa"])
+	}
+	if byCode["bbb"].Visits != 20 || byCode["bbb"].Uniques != 2 {
+		t.Errorf("bbb totals = %+v, want 20/2", byCode["bbb"])
+	}
+
+	// dimension values summed across codes, ordered by uniques desc
+	vals, err := s.GetBreakdownsForCodes(ctx, []string{"aaa", "bbb"}, "browser", day1, day2, 0)
+	if err != nil {
+		t.Fatalf("breakdowns for codes: %v", err)
+	}
+	if len(vals) != 2 {
+		t.Fatalf("vals len = %d, want 2", len(vals))
+	}
+	if vals[0].Value != "Chrome" || vals[0].Visits != 15 || vals[0].Uniques != 7 {
+		t.Errorf("vals[0] = %+v, want Chrome 15/7", vals[0])
+	}
+	if vals[1].Value != "Safari" || vals[1].Visits != 2 || vals[1].Uniques != 2 {
+		t.Errorf("vals[1] = %+v, want Safari 2/2", vals[1])
+	}
+
+	// limit trims, and other codes are excluded
+	limited, err := s.GetBreakdownsForCodes(ctx, []string{"aaa", "bbb"}, "browser", day1, day2, 1)
+	if err != nil || len(limited) != 1 || limited[0].Value != "Chrome" {
+		t.Fatalf("limited = %+v, %v (want Chrome only)", limited, err)
+	}
+
+	// an empty code set returns nothing
+	none, err := s.GetBreakdownsForCodes(ctx, nil, "browser", day1, day2, 0)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("empty codes breakdowns = %+v, %v", none, err)
+	}
+}

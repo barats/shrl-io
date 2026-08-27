@@ -2,10 +2,13 @@ import type {
 	AnalyticsResponse,
 	ApiKey,
 	BreakdownResponse,
+	DashboardStats,
+	DashboardTopLink,
 	InviteCode,
 	Link,
 	Settings,
 	Stats,
+	StatsBreakdown,
 	Team,
 	TeamDetail,
 	TeamMember,
@@ -141,6 +144,37 @@ export const api = {
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
 		return req<Stats>(`stats?${q}`);
+	},
+
+	async getDashboard(from?: string, to?: string): Promise<DashboardStats> {
+		const q = new URLSearchParams();
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<DashboardStats>(`dashboard?${q}`);
+	},
+
+	async getStatsBreakdowns(
+		dimension: string,
+		from?: string,
+		to?: string,
+		limit = 0
+	): Promise<StatsBreakdown> {
+		const q = new URLSearchParams({ dimension, limit: String(limit) });
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<StatsBreakdown>(`stats/breakdowns?${q}`);
+	},
+
+	async getTopLinks(
+		from?: string,
+		to?: string,
+		metric: 'visits' | 'visitors' = 'visits',
+		limit = 0
+	): Promise<DashboardTopLink[]> {
+		const q = new URLSearchParams({ metric, limit: String(limit) });
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<DashboardTopLink[]>(`stats/top-links?${q}`);
 	},
 
 	async getTeamStats(id: number, from?: string, to?: string): Promise<Stats> {

@@ -40,6 +40,24 @@ func (f *fakeCache) RemoveUniqueVisitor(_ context.Context, code string, day time
 	return nil
 }
 
+func (f *fakeCache) AddUniqueVisitorDim(_ context.Context, code string, day time.Time, dimension, value, hash string) (bool, error) {
+	key := code + "|" + day.Format("2006-01-02") + "|" + dimension + "|" + value + "|" + hash
+	if f.seen == nil {
+		f.seen = map[string]bool{}
+	}
+	if f.seen[key] {
+		return false, nil
+	}
+	f.seen[key] = true
+	return true, nil
+}
+
+func (f *fakeCache) RemoveUniqueVisitorDim(_ context.Context, code string, day time.Time, dimension, value, hash string) error {
+	key := code + "|" + day.Format("2006-01-02") + "|" + dimension + "|" + value + "|" + hash
+	delete(f.seen, key)
+	return nil
+}
+
 type fakeStore struct {
 	dailies    []store.DailyIncrement
 	lifetimes  []store.LifetimeIncrement
@@ -310,5 +328,79 @@ func TestProcessMessagesLocationUnknownWithoutGeo(t *testing.T) {
 		if !found {
 			t.Errorf("dimension %q should be 'unknown' without a geo resolver", dim)
 		}
+	}
+}
+
+// TestProcessMessagesDimensionUniques verifies per-dimension unique-visitor
+// tracking: a deterministic dimension (browser) counts each visitor once, and
+// a referrer the visitor appears under multiple values counts them per value.
+func TestProcessMessagesDimensionUniques(t *testing.T) {
+	fs := &fakeStore{}
+	p := &Processor{
+		Cache: &fakeCache{},
+		Store: fs,
+		Now:   func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+	}
+	msgs := []redis.XMessage{
+		// visitor A via google, twice
+		{ID: "1-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "1.1.1.1",
+			"user_agent": chromeUA(), "referrer": "https://google.com",
+			"ts": "2026-08-24T10:00:00Z",
+		}},
+		{ID: "2-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "1.1.1.1",
+			"user_agent": chromeUA(), "referrer": "https://google.com",
+			"ts": "2026-08-24T11:00:00Z",
+		}},
+		// visitor B (same browser, different device identity), direct
+		{ID: "3-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "2.2.2.2",
+			"user_agent": chromeUA(), "referrer": "",
+			"ts": "2026-08-24T11:30:00Z",
+		}},
+		// visitor A again, now from twitter
+		{ID: "4-0", Values: map[string]interface{}{
+			"hostname": "shrl.io", "code": "abc", "ip": "1.1.1.1",
+			"user_agent": chromeUA(), "referrer": "https://twitter.com",
+			"ts": "2026-08-24T11:45:00Z",
+		}},
+	}
+	if err := p.ProcessMessages(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+
+	byDim := map[string]map[string]store.BreakdownIncrement{}
+	for _, b := range fs.breakdowns {
+		if byDim[b.Dimension] == nil {
+			byDim[b.Dimension] = map[string]store.BreakdownIncrement{}
+		}
+		prev := byDim[b.Dimension][b.Value]
+		prev.Count += b.Count
+		prev.Uniques += b.Uniques
+		byDim[b.Dimension][b.Value] = prev
+	}
+
+	// deterministic dimension: both visitors share one browser value.
+	if len(byDim["browser"]) != 1 {
+		t.Fatalf("browser values = %v, want 1 (both visitors share a browser)", byDim["browser"])
+	}
+	for value, inc := range byDim["browser"] {
+		if inc.Count != 4 || inc.Uniques != 2 {
+			t.Errorf("browser=%s count=%d uniques=%d, want 4 visits / 2 uniques", value, inc.Count, inc.Uniques)
+		}
+	}
+
+	// referrer is per-value: visitor A counts once under google and once under
+	// twitter; visitor B once under direct.
+	referrer := byDim["referrer"]
+	if referrer["google.com"].Count != 2 || referrer["google.com"].Uniques != 1 {
+		t.Errorf("google.com = %+v, want count 2 uniques 1", referrer["google.com"])
+	}
+	if referrer["twitter.com"].Count != 1 || referrer["twitter.com"].Uniques != 1 {
+		t.Errorf("twitter.com = %+v, want count 1 uniques 1", referrer["twitter.com"])
+	}
+	if referrer["direct"].Count != 1 || referrer["direct"].Uniques != 1 {
+		t.Errorf("direct = %+v, want count 1 uniques 1", referrer["direct"])
 	}
 }

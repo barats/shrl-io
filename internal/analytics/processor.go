@@ -16,6 +16,8 @@ import (
 type Cache interface {
 	AddUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) (bool, error)
 	RemoveUniqueVisitor(ctx context.Context, code string, day time.Time, hash string) error
+	AddUniqueVisitorDim(ctx context.Context, code string, day time.Time, dimension, value, hash string) (bool, error)
+	RemoveUniqueVisitorDim(ctx context.Context, code string, day time.Time, dimension, value, hash string) error
 }
 
 type Store interface {
@@ -62,14 +64,19 @@ type breakdownKey struct {
 	value     string
 }
 
+type dimValue struct {
+	dim, value string
+}
+
 // ProcessMessages turns raw stream events into analytics deltas and applies
 // them in one transaction. Bots are skipped; unique visitors are deduplicated
-// through the Cache.
+// through the Cache, once per link-day and once per link-day-dimension-value.
 func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) error {
 	dailies := map[dayLink]store.DailyIncrement{}
 	lifetimes := map[linkKey]store.LifetimeIncrement{}
 	breakdowns := map[breakdownKey]store.BreakdownIncrement{}
 	var addedHashes []visitorHash
+	var addedDimHashes []visitorDimHash
 
 	for _, m := range msgs {
 		code := strVal(m.Values, "code")
@@ -112,27 +119,31 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 
 		device, os, browser := ClassifyUA(ua)
 		country, region, city := locationField(p.Geo, ip)
-		for dim, val := range map[string]string{
-			"referrer": ReferrerHost(referrer),
-			"device":   device,
-			"os":       os,
-			"browser":  browser,
-			"country":  country,
-			"region":   region,
-			"city":     city,
-		} {
-			bk := breakdownKey{day: day, code: code, dimension: dim, value: val}
-			b := breakdowns[bk]
-			b.Code, b.Day, b.Dimension, b.Value = code, day, dim, val
-			b.Count++
-			breakdowns[bk] = b
+		dims := []dimValue{
+			{"referrer", ReferrerHost(referrer)},
+			{"device", device},
+			{"os", os},
+			{"browser", browser},
+			{"country", country},
+			{"region", region},
+			{"city", city},
 		}
 		for _, dim := range UTMParams {
-			val := NormalizeUTMValue(strVal(m.Values, dim))
-			bk := breakdownKey{day: day, code: code, dimension: dim, value: val}
+			dims = append(dims, dimValue{dim, NormalizeUTMValue(strVal(m.Values, dim))})
+		}
+		for _, dv := range dims {
+			bk := breakdownKey{day: day, code: code, dimension: dv.dim, value: dv.value}
 			b := breakdowns[bk]
-			b.Code, b.Day, b.Dimension, b.Value = code, day, dim, val
+			b.Code, b.Day, b.Dimension, b.Value = code, day, dv.dim, dv.value
 			b.Count++
+			added, err := p.Cache.AddUniqueVisitorDim(ctx, code, day, dv.dim, dv.value, hash)
+			if err != nil {
+				return err
+			}
+			if added {
+				b.Uniques++
+				addedDimHashes = append(addedDimHashes, visitorDimHash{code, day, dv.dim, dv.value, hash})
+			}
 			breakdowns[bk] = b
 		}
 	}
@@ -144,6 +155,9 @@ func (p *Processor) ProcessMessages(ctx context.Context, msgs []redis.XMessage) 
 		for _, h := range addedHashes {
 			p.Cache.RemoveUniqueVisitor(ctx, h.code, h.day, h.hash)
 		}
+		for _, h := range addedDimHashes {
+			p.Cache.RemoveUniqueVisitorDim(ctx, h.code, h.day, h.dim, h.value, h.hash)
+		}
 		return err
 	}
 	return nil
@@ -153,6 +167,13 @@ type visitorHash struct {
 	code string
 	day  time.Time
 	hash string
+}
+
+type visitorDimHash struct {
+	code       string
+	day        time.Time
+	dim, value string
+	hash       string
 }
 
 func strVal(values map[string]interface{}, key string) string {

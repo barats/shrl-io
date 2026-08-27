@@ -30,7 +30,8 @@
 					<span class="hidden sm:inline">shrl.io</span>
 				</a>
 				<nav class="flex items-center gap-4">
-					<a href="/" class="text-sm text-muted-foreground hover:text-foreground">Links</a>
+					<a href="/" class="text-sm text-muted-foreground hover:text-foreground">Dashboard</a>
+					<a href="/links" class="text-sm text-muted-foreground hover:text-foreground">Links</a>
 					<a href="/teams" class="text-sm text-muted-foreground hover:text-foreground">Teams</a>
 					<a href="/account" class="text-sm text-muted-foreground hover:text-foreground">Account</a>
 					{#if data?.user?.isAdmin}

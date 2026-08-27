@@ -19,6 +19,13 @@ import (
 )
 
 func newTestService(t *testing.T) (*LinkService, *cache.LinkCache) {
+	svc, _, lc := newTestServiceFull(t)
+	return svc, lc
+}
+
+// newTestServiceFull is the shared builder; it also returns the raw db so
+// tests can seed analytics rollups directly.
+func newTestServiceFull(t *testing.T) (*LinkService, *gorm.DB, *cache.LinkCache) {
 	t.Helper()
 	dsn := "file:" + strings.ReplaceAll(t.Name(), "/", "_") + "?mode=memory&cache=shared"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -49,7 +56,7 @@ func newTestService(t *testing.T) (*LinkService, *cache.LinkCache) {
 	settings := store.NewSettingStore(db)
 	lc := cache.NewLinkCache(client)
 	svc := NewLinkService(links, analytics, hs, teams, settings, lc, "shrl.io", 30)
-	return svc, lc
+	return svc, db, lc
 }
 
 func TestCreateLinkWritesCache(t *testing.T) {
