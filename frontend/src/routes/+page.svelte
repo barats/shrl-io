@@ -6,6 +6,7 @@
 	import RangeSelect from '$lib/components/RangeSelect.svelte';
 	import RankCard from '$lib/components/RankCard.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
+	import WorldMap from '$lib/components/WorldMap.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
@@ -296,6 +297,9 @@
 				onMore={openLocDialog}
 			/>
 		</div>
+
+		<!-- Row 5: world map (full width) -->
+		<WorldMap from={range.from} to={range.to} />
 	{/if}
 </div>
 
