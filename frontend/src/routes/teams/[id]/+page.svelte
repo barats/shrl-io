@@ -1,506 +1,326 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, daysAgo } from '$lib/api';
-	import type { InviteCode, Link, Stats, TeamDetail, TeamRole, User } from '$lib/types';
-	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card';
-	import { Input } from '$lib/components/ui/input';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import {
-		Table,
-		TableBody,
-		TableCell,
-		TableHead,
-		TableHeader,
-		TableRow
-	} from '$lib/components/ui/table';
-	import {
-		Copy,
-		KeyRound,
-		Link2,
-		LogOut,
-		Plus,
-		Trash2,
-		TriangleAlert,
-		UserPlus
-	} from '@lucide/svelte';
+	import { api } from '$lib/api';
+	import BreakdownDialog, { type BreakdownSection } from '$lib/components/BreakdownDialog.svelte';
+	import RangeSelect from '$lib/components/RangeSelect.svelte';
+	import RankCard from '$lib/components/RankCard.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
-	import CreateLinkDialog from '$lib/components/CreateLinkDialog.svelte';
+	import WorldMap from '$lib/components/WorldMap.svelte';
+	import { countryLabel } from '$lib/countries';
+	import {
+		bucketTimeseries,
+		isRangePreset,
+		presetLabel,
+		rangeForPreset,
+		type DateRange,
+		type RangePreset
+	} from '$lib/dashboard';
+	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+	import { Button } from '$lib/components/ui/button';
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Link2, Plus, TriangleAlert } from '@lucide/svelte';
+	import type { DashboardBreakdownItem, DashboardStats, DashboardTopLink } from '$lib/types';
 
+	const RANGE_KEY = 'shrl:range:preset';
 	const teamId = $derived(Number(page.params.id));
-	const isAdmin = $derived(page.data.user?.isAdmin ?? false);
 
-	let team = $state<TeamDetail | null>(null);
-	let me = $state<User | null>(null);
+	let data = $state<DashboardStats | null>(null);
+	let range = $state<DateRange>(rangeForPreset('7d'));
 	let loading = $state(true);
 	let error = $state('');
+	let envTab = $state('browser');
+	let locTab = $state('country');
+	let topTab = $state<'visits' | 'visitors'>('visits');
+	let dialogOpen = $state(false);
+	let dialogInitial = $state<string>('links');
 
-	let hostnames = $state<string[]>([]);
-	let defaultHostname = $state('');
-	let teamLinks = $state<Link[]>([]);
-	let stats = $state<Stats | null>(null);
-	let linksLoading = $state(true);
-	let linksError = $state('');
-	let createOpen = $state(false);
+	// The URL query is the single source of truth for the range; the effect
+	// rebuilds the range and refetches on mount, on selection, and on
+	// back/forward navigation.
+	$effect(() => {
+		const sp = page.url.searchParams;
+		const preset = sp.get('preset');
+		const from = sp.get('from');
+		const to = sp.get('to');
+		let next: DateRange;
+		if (from && to) {
+			next = { preset: 'custom', from, to };
+		} else if (preset && isRangePreset(preset)) {
+			next = rangeForPreset(preset as RangePreset);
+		} else {
+			const saved = localStorage.getItem(RANGE_KEY);
+			const p = saved && isRangePreset(saved) ? (saved as RangePreset) : '7d';
+			next = rangeForPreset(p);
+		}
+		range = next;
+		load(next);
+	});
 
-	let invites = $state<InviteCode[]>([]);
-	let invitesLoading = $state(true);
-	let invitesError = $state('');
-	let copied = $state('');
-
-	let addUsername = $state('');
-	let addingMember = $state(false);
-	let memberError = $state('');
-
-	const myRole = $derived<TeamRole | undefined>(
-		team?.members.find((m) => m.id === me?.id)?.role
-	);
-	const isOwner = $derived(myRole === 'owner');
-	const canManage = $derived(isOwner || isAdmin);
-
-	onMount(async () => {
+	async function load(r: DateRange) {
+		error = '';
 		try {
-			const cfg = await api.config();
-			const [t, u, hs] = await Promise.all([api.getTeam(teamId), api.me(), api.hostnames()]);
-			team = t;
-			me = u;
-			hostnames = [...new Set([cfg.defaultHostname, ...hs])].sort();
-			defaultHostname = cfg.defaultHostname;
-			await Promise.all([loadLinks(), loadStats(), loadInvites()]);
+			data = await api.getTeamDashboard(teamId, r.from, r.to);
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
 			loading = false;
 		}
-	});
-
-	async function loadLinks() {
-		linksLoading = true;
-		linksError = '';
-		try {
-			teamLinks = await api.listTeamLinks(teamId);
-		} catch (e) {
-			linksError = (e as Error).message;
-		} finally {
-			linksLoading = false;
-		}
 	}
 
-	async function loadStats() {
-		try {
-			stats = await api.getTeamStats(teamId, daysAgo(30));
-		} catch (e) {
-			linksError = (e as Error).message;
+	function applyRange(r: DateRange) {
+		const url = new URL(page.url);
+		if (r.preset === 'custom') {
+			url.searchParams.set('from', r.from);
+			url.searchParams.set('to', r.to);
+			url.searchParams.delete('preset');
+		} else {
+			url.searchParams.set('preset', r.preset);
+			url.searchParams.delete('from');
+			url.searchParams.delete('to');
+			localStorage.setItem(RANGE_KEY, r.preset);
 		}
+		goto(url.pathname + url.search, { keepFocus: true });
 	}
 
-	async function loadInvites() {
-		if (!isOwner) {
-			invitesLoading = false;
-			return;
-		}
-		invitesLoading = true;
-		invitesError = '';
-		try {
-			invites = await api.listInvites(teamId);
-		} catch (e) {
-			invitesError = (e as Error).message;
-		} finally {
-			invitesLoading = false;
-		}
+	const visitsCard = $derived(
+		range.preset === 'all' ? (data?.lifetime_visits ?? 0) : (data?.window_visits ?? 0)
+	);
+
+	function topItems(links: DashboardTopLink[]): DashboardBreakdownItem[] {
+		return links.map((l) => ({
+			value: `${l.hostname}/${l.code}`,
+			visits: l.visits,
+			unique_visitors: l.unique_visitors
+		}));
 	}
 
-	async function generateInvite() {
-		invitesError = '';
-		try {
-			await api.createInvite(teamId);
-			await loadInvites();
-		} catch (e) {
-			invitesError = (e as Error).message;
+	function topHrefs(links: DashboardTopLink[]): Record<string, string> {
+		const out: Record<string, string> = {};
+		for (const l of links) {
+			out[`${l.hostname}/${l.code}`] = `/teams/${teamId}/links/${encodeURIComponent(l.code)}`;
 		}
+		return out;
 	}
 
-	async function revokeInvite(code: string) {
-		invitesError = '';
-		try {
-			await api.revokeInvite(teamId, code);
-			await loadInvites();
-		} catch (e) {
-			invitesError = (e as Error).message;
+	// The combined breakdown dialog's nav, config-driven so future dimensions
+	// (e.g. utm_*) can be added without touching the dialog itself. The
+	// fetchers close over the live `range` and `teamId`.
+	const breakdownSections: BreakdownSection[] = [
+		{
+			id: 'links',
+			label: 'Top Links',
+			children: [
+				{ id: 'visits', label: 'Visits' },
+				{ id: 'visitors', label: 'Visitors' }
+			],
+			metric: (sub) => (sub === 'visits' ? 'visits' : 'visitors'),
+			fetcher: async (sub) => {
+				const m = sub === 'visits' ? 'visits' : 'visitors';
+				const links = await api.getTeamTopLinks(teamId, range.from, range.to, m, 0);
+				return { items: topItems(links), hrefs: topHrefs(links) };
+			}
+		},
+		{
+			id: 'sources',
+			label: 'Sources',
+			fetcher: async () => ({
+				items: (await api.getTeamStatsBreakdowns(teamId, 'referrer', range.from, range.to, 0))
+					.items
+			})
+		},
+		{
+			id: 'environment',
+			label: 'Environment',
+			children: [
+				{ id: 'browser', label: 'Browser' },
+				{ id: 'os', label: 'OS' },
+				{ id: 'device', label: 'Device' }
+			],
+			fetcher: async (sub) => ({
+				items: (
+					await api.getTeamStatsBreakdowns(teamId, sub ?? 'browser', range.from, range.to, 0)
+				).items
+			})
+		},
+		{
+			id: 'location',
+			label: 'Location',
+			children: [
+				{ id: 'country', label: 'Country' },
+				{ id: 'region', label: 'Region' },
+				{ id: 'city', label: 'City' }
+			],
+			valueFormatter: (v, sub) => (sub === 'country' ? countryLabel(v) : v),
+			fetcher: async (sub) => ({
+				items: (
+					await api.getTeamStatsBreakdowns(teamId, sub ?? 'country', range.from, range.to, 0)
+				).items
+			})
 		}
-	}
+	];
 
-	async function copyCode(code: string) {
-		try {
-			await navigator.clipboard.writeText(code);
-			copied = code;
-			setTimeout(() => (copied = ''), 1500);
-		} catch {
-			/* clipboard unavailable */
-		}
-	}
+	const dialogConfig = $derived(
+		dialogOpen ? { sections: breakdownSections, initial: dialogInitial } : null
+	);
 
-	async function addMember() {
-		addingMember = true;
-		memberError = '';
-		try {
-			await api.addTeamMember(teamId, addUsername.trim());
-			addUsername = '';
-			team = await api.getTeam(teamId);
-		} catch (e) {
-			memberError = (e as Error).message;
-		} finally {
-			addingMember = false;
-		}
-	}
-
-	async function setRole(memberId: number, role: TeamRole) {
-		memberError = '';
-		try {
-			await api.setTeamMemberRole(teamId, memberId, role);
-			team = await api.getTeam(teamId);
-		} catch (e) {
-			memberError = (e as Error).message;
-		}
-	}
-
-	async function removeMember(memberId: number) {
-		memberError = '';
-		try {
-			await api.removeTeamMember(teamId, memberId);
-			team = await api.getTeam(teamId);
-		} catch (e) {
-			memberError = (e as Error).message;
-		}
-	}
-
-	async function leave() {
-		if (!me) return;
-		if (!window.confirm('Leave this Team? Your Links stay with the Team.')) return;
-		try {
-			await api.removeTeamMember(teamId, me.id);
-			await goto('/teams');
-		} catch (e) {
-			error = (e as Error).message;
-		}
-	}
-
-	async function removeTeam() {
-		if (!window.confirm('Delete this Team? Its Links revert to Personal for their Creators.')) return;
-		try {
-			await api.deleteTeam(teamId);
-			await goto('/teams');
-		} catch (e) {
-			error = (e as Error).message;
-		}
+	function openDialog(id: string) {
+		dialogInitial = id;
+		dialogOpen = true;
 	}
 </script>
 
 <svelte:head>
-	<title>{team?.name ?? 'Team'} — shrl.io</title>
+	<title>Overview — {page.data.team?.name ?? 'Team'} — shrl.io</title>
 </svelte:head>
 
-{#if loading}
-	<div class="space-y-4">
-		<Skeleton class="h-8 w-64" />
-		<Skeleton class="h-40 w-full" />
-	</div>
-{:else if error}
-	<Alert variant="destructive">
+<div class="flex flex-wrap items-center justify-between gap-3">
+	<h1 class="text-2xl font-semibold tracking-tight">Overview</h1>
+	<RangeSelect value={range} onchange={applyRange} />
+</div>
+
+{#if error}
+	<Alert variant="destructive" class="mt-4">
 		<TriangleAlert class="size-4" />
-		<AlertTitle>Failed to load Team</AlertTitle>
+		<AlertTitle>Failed to load dashboard</AlertTitle>
 		<AlertDescription>{error}</AlertDescription>
 	</Alert>
-{:else if team}
-	<div class="flex flex-wrap items-center gap-3">
-		<h1 class="text-2xl font-semibold tracking-tight">{team.name}</h1>
-		{#if myRole === 'owner'}
-			<Badge>Owner</Badge>
-		{:else if myRole === 'member'}
-			<Badge variant="secondary">Member</Badge>
-		{:else}
-			<Badge variant="outline">Not a member</Badge>
-		{/if}
-		<div class="ml-auto flex gap-2">
-			{#if myRole}
-				<Button variant="outline" onclick={leave}>
-					<LogOut class="size-4" /> Leave
-				</Button>
-			{/if}
-			{#if isAdmin}
-				<Button variant="destructive" onclick={removeTeam}>
-					<Trash2 class="size-4" /> Delete Team
-				</Button>
-			{/if}
-		</div>
-	</div>
-	<p class="mt-1 text-sm text-muted-foreground">
-		Created {team.created_at.slice(0, 10)} · {team.members.length}{' '}
-		{team.members.length === 1 ? 'member' : 'members'}
-	</p>
-
-	<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-		<Card>
-			<CardHeader class="pb-2">
-				<CardTitle class="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
-			</CardHeader>
-			<CardContent class="pt-0">
-				<p class="text-2xl font-semibold">{stats?.total_links ?? 0}</p>
-			</CardContent>
-		</Card>
-		<Card>
-			<CardHeader class="pb-2">
-				<CardTitle class="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
-			</CardHeader>
-			<CardContent class="pt-0">
-				<p class="text-2xl font-semibold">{stats?.total_visits ?? 0}</p>
-			</CardContent>
-		</Card>
-		<Card>
-			<CardHeader class="pb-2">
-				<CardTitle class="text-sm font-medium text-muted-foreground">Unique Visitors</CardTitle>
-			</CardHeader>
-			<CardContent class="pt-0">
-				<p class="text-2xl font-semibold">{stats?.window_uniques ?? 0}</p>
-				<p class="text-xs text-muted-foreground">last 30 days</p>
-			</CardContent>
-		</Card>
-	</div>
-
-	<Card class="mt-6">
-		<CardHeader>
-			<CardTitle>Visits & Visitors (last 30 days)</CardTitle>
-		</CardHeader>
-		<CardContent>
-			<StatsChart rows={stats?.timeseries ?? []} />
-		</CardContent>
-	</Card>
-
-	<div class="mt-6 grid gap-6 lg:grid-cols-2">
-		<div class="space-y-6">
-			<Card>
-				<CardHeader class="flex-row items-center justify-between space-y-0">
-					<CardTitle>Members</CardTitle>
-					<span class="text-sm text-muted-foreground">{team.members.length}</span>
-				</CardHeader>
-				<CardContent>
-					{#if memberError}
-						<Alert variant="destructive" class="mb-4">
-							<TriangleAlert class="size-4" />
-							<AlertDescription>{memberError}</AlertDescription>
-						</Alert>
-					{/if}
-					{#if team.members.length === 0}
-						<p class="py-4 text-center text-sm text-muted-foreground">No members yet.</p>
-					{:else}
-						<ul class="divide-y">
-							{#each team.members as member (member.id)}
-								<li class="flex items-center justify-between gap-2 py-2.5">
-									<span class="flex min-w-0 items-center gap-2">
-										<span class="truncate font-medium">{member.username}</span>
-										{#if member.id === me?.id}
-											<span class="text-xs text-muted-foreground">(you)</span>
-										{/if}
-										{#if member.role === 'owner'}
-											<Badge>Owner</Badge>
-										{:else}
-											<Badge variant="secondary">Member</Badge>
-										{/if}
-									</span>
-									{#if canManage && member.id !== me?.id}
-										<span class="flex shrink-0 gap-1.5">
-											{#if member.role === 'owner'}
-												<Button
-													variant="outline"
-													size="sm"
-													onclick={() => setRole(member.id, 'member')}
-												>
-													Demote
-												</Button>
-											{:else}
-												<Button
-													variant="outline"
-													size="sm"
-													onclick={() => setRole(member.id, 'owner')}
-												>
-													Promote
-												</Button>
-											{/if}
-											<Button
-												variant="ghost"
-												size="icon-sm"
-												title="Remove member"
-												onclick={() => removeMember(member.id)}
-											>
-												<Trash2 class="size-4" />
-											</Button>
-										</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-					{#if isAdmin}
-						<form
-							onsubmit={(e) => {
-								e.preventDefault();
-								addMember();
-							}}
-							class="mt-4 flex gap-2"
-						>
-							<Input
-								placeholder="Add a member by username…"
-								bind:value={addUsername}
-								class="flex-1"
-								required
-							/>
-							<Button type="submit" disabled={addingMember}>
-								<UserPlus class="size-4" /> Add
-							</Button>
-						</form>
-					{/if}
-				</CardContent>
-			</Card>
-
-			{#if isOwner}
-				<Card>
-					<CardHeader>
-						<CardTitle>Invite Codes</CardTitle>
-						<CardDescription>
-							Generate a single-use code and share it with someone who should join. Codes
-							stop working once used or revoked.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						{#if invitesError}
-							<Alert variant="destructive" class="mb-4">
-								<TriangleAlert class="size-4" />
-								<AlertDescription>{invitesError}</AlertDescription>
-							</Alert>
-						{/if}
-						{#if invitesLoading}
-							<Skeleton class="h-10 w-full" />
-						{:else if invites.length === 0}
-							<p class="py-2 text-center text-sm text-muted-foreground">No outstanding invite codes.</p>
-						{:else}
-							<ul class="divide-y">
-								{#each invites as inv (inv.id)}
-									<li class="flex items-center justify-between gap-2 py-2.5">
-										<code class="rounded bg-muted px-2 py-1 text-sm font-semibold tracking-wide">
-											{inv.code}
-										</code>
-										<span class="flex shrink-0 gap-1.5">
-											<Button variant="outline" size="sm" onclick={() => copyCode(inv.code)}>
-												<Copy class="size-4" />
-												{copied === inv.code ? 'Copied' : 'Copy'}
-											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												title="Revoke code"
-												onclick={() => revokeInvite(inv.code)}
-											>
-												<Trash2 class="size-4" />
-											</Button>
-										</span>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-						<Button class="mt-4 w-full" onclick={generateInvite}>
-							<KeyRound class="size-4" /> Generate invite code
-						</Button>
-					</CardContent>
-				</Card>
-			{/if}
-		</div>
-
-		<div class="space-y-6">
-			<Card>
-				<CardHeader class="flex-row items-center justify-between space-y-0">
-					<CardTitle>Team Links</CardTitle>
-					<Button size="sm" onclick={() => (createOpen = true)}>
-						<Plus class="size-4" /> Create Link
-					</Button>
-				</CardHeader>
-				<CardContent>
-					{#if linksError}
-						<Alert variant="destructive">
-							<TriangleAlert class="size-4" />
-							<AlertDescription>{linksError}</AlertDescription>
-						</Alert>
-					{:else if linksLoading}
-						<div class="space-y-3">
-							{#each [0, 1, 2] as i (i)}
-								<Skeleton class="h-10 w-full" />
-							{/each}
-						</div>
-					{:else if teamLinks.length === 0}
-						<p class="py-8 text-center text-sm text-muted-foreground">
-							No Links yet. Create one with the button above.
-						</p>
-					{:else}
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Link</TableHead>
-									<TableHead>Destination</TableHead>
-									<TableHead class="w-24">Status</TableHead>
-									<TableHead class="w-36">Created</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{#each teamLinks as link (link.code)}
-									<TableRow>
-										<TableCell class="font-medium">
-											<a
-												href={`/teams/${teamId}/links/${encodeURIComponent(link.code)}`}
-												class="inline-flex items-center gap-1.5 text-primary hover:underline"
-											>
-												<Link2 class="size-3.5" />
-												{link.hostname}/{link.code}
-											</a>
-										</TableCell>
-										<TableCell class="max-w-72 truncate text-muted-foreground">
-											{link.destination}
-										</TableCell>
-										<TableCell>
-											{#if link.disabled}
-												<Badge variant="secondary">Disabled</Badge>
-											{:else}
-												<Badge>Active</Badge>
-											{/if}
-										</TableCell>
-										<TableCell class="text-muted-foreground">
-											{link.created_at.slice(0, 10)}
-										</TableCell>
-									</TableRow>
-								{/each}
-							</TableBody>
-						</Table>
-					{/if}
-				</CardContent>
-			</Card>
-		</div>
-	</div>
-
-	<CreateLinkDialog
-		bind:open={createOpen}
-		{hostnames}
-		{defaultHostname}
-		{teamId}
-		onCreated={async () => {
-			await Promise.all([loadLinks(), loadStats()]);
-		}}
-	/>
 {/if}
+
+<div class="mt-4 space-y-6">
+	{#if loading && !data}
+		<div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+			{#each [0, 1, 2, 3, 4] as i (i)}
+				<Skeleton class="h-24 w-full" />
+			{/each}
+		</div>
+		<Skeleton class="h-48 w-full" />
+		<div class="grid gap-6 lg:grid-cols-2">
+			<Skeleton class="h-64 w-full" />
+			<Skeleton class="h-64 w-full" />
+		</div>
+		<div class="grid gap-6 lg:grid-cols-2">
+			<Skeleton class="h-64 w-full" />
+			<Skeleton class="h-64 w-full" />
+		</div>
+	{:else if data && data.total_links === 0}
+		<Card class="mx-auto mt-10 max-w-md">
+			<CardContent class="flex flex-col items-center gap-3 py-10 text-center">
+				<Link2 class="size-8 text-muted-foreground" />
+				<h2 class="text-lg font-semibold">No links in this team yet</h2>
+				<p class="text-sm text-muted-foreground">
+					Create the first link to start seeing analytics here.
+				</p>
+				<Button href={`/teams/${teamId}/links`}>
+					<Plus class="size-4" /> Create Link
+				</Button>
+			</CardContent>
+		</Card>
+	{:else if data}
+		<!-- Row 1: stats cards. Total/Active/Disabled are current state and
+		     ignore the range; Visits/Visitors are range-scoped. -->
+		<div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{data.total_links}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Active</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{data.active_links}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Disabled</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{data.disabled_links}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Visits</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{visitsCard}</p>
+					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Visitors</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{data.window_uniques}</p>
+					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
+				</CardContent>
+			</Card>
+		</div>
+
+		<!-- Row 2: visits & visitors chart -->
+		<Card>
+			<CardHeader>
+				<CardTitle>Visits & Visitors ({presetLabel(range.preset)})</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<StatsChart rows={bucketTimeseries(data.timeseries, range.from, range.to)} />
+			</CardContent>
+		</Card>
+
+		<!-- Row 3: top links + sources -->
+		<div class="grid gap-6 lg:grid-cols-2">
+			<RankCard
+				title="Top Links"
+				items={topItems(topTab === 'visits' ? data.top_by_visits : data.top_by_visitors)}
+				hrefs={topHrefs(topTab === 'visits' ? data.top_by_visits : data.top_by_visitors)}
+				tabs={['visits', 'visitors']}
+				active={topTab}
+				onTabChange={(t) => (topTab = t as 'visits' | 'visitors')}
+				metric={topTab}
+				onMore={() => openDialog('links')}
+			/>
+			<RankCard
+				title="Sources"
+				items={data.sources ?? []}
+				metric="visitors"
+				onMore={() => openDialog('sources')}
+			/>
+		</div>
+
+		<!-- Row 4: environment + location -->
+		<div class="grid gap-6 lg:grid-cols-2">
+			<RankCard
+				title="Environment"
+				items={data.environment[envTab] ?? []}
+				tabs={['browser', 'os', 'device']}
+				active={envTab}
+				onTabChange={(t) => (envTab = t)}
+				metric="visitors"
+				onMore={() => openDialog('environment')}
+			/>
+			<RankCard
+				title="Location"
+				items={data.location[locTab] ?? []}
+				tabs={['country', 'region', 'city']}
+				active={locTab}
+				onTabChange={(t) => (locTab = t)}
+				metric="visitors"
+				valueFormatter={(v) => (locTab === 'country' ? countryLabel(v) : v)}
+				onMore={() => openDialog('location')}
+			/>
+		</div>
+
+		<!-- Row 5: world map (full width) -->
+		<WorldMap from={range.from} to={range.to} teamId={teamId} />
+	{/if}
+</div>
+
+<BreakdownDialog open={dialogOpen} config={dialogConfig} onclose={() => (dialogOpen = false)} />

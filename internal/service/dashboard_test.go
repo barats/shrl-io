@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -207,5 +208,150 @@ func TestGetDashboardEmptyUser(t *testing.T) {
 	}
 	if len(d.Timeseries) != 0 {
 		t.Errorf("timeseries = %+v, want empty", d.Timeseries)
+	}
+}
+
+func TestGetTeamDashboard(t *testing.T) {
+	svc, db, _ := newTestServiceFull(t)
+	ctx := context.Background()
+	alice := &domain.User{ID: 1, Username: "alice"}
+	bob := &domain.User{ID: 2, Username: "bob"}
+
+	team := &domain.Team{Name: "growth"}
+	if err := svc.teams.Create(ctx, team); err != nil {
+		t.Fatalf("create team: %v", err)
+	}
+	if err := svc.teams.AddMember(ctx, team.ID, alice.ID, domain.RoleOwner); err != nil {
+		t.Fatalf("add alice: %v", err)
+	}
+
+	la, err := svc.CreateLink(ctx, &team.ID, alice.ID, CreateLinkInput{Destination: "https://example.com/a"})
+	if err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	lb, err := svc.CreateLink(ctx, &team.ID, alice.ID, CreateLinkInput{Destination: "https://example.com/b"})
+	if err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	// alice's personal link must not leak into the team dashboard.
+	if _, err := svc.CreateLink(ctx, nil, alice.ID, CreateLinkInput{Destination: "https://example.com/personal"}); err != nil {
+		t.Fatalf("create personal: %v", err)
+	}
+	if _, err := svc.SetDisabled(ctx, alice, lb.Code, true); err != nil {
+		t.Fatalf("disable b: %v", err)
+	}
+
+	day := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	for _, d := range []*domain.DailyStats{
+		{Code: la.Code, Day: day, Visits: 10, UniqueVisitors: 6},
+		{Code: lb.Code, Day: day, Visits: 2, UniqueVisitors: 2},
+	} {
+		if err := db.Create(d).Error; err != nil {
+			t.Fatalf("seed daily: %v", err)
+		}
+	}
+	if err := db.Create(&domain.LifetimeStats{Code: la.Code, TotalVisits: 50}).Error; err != nil {
+		t.Fatalf("seed lifetime: %v", err)
+	}
+	_ = db.Create(&domain.Breakdown{Code: la.Code, Day: day, Dimension: "browser", Value: "Chrome", Count: 8, UniqueVisitors: 5})
+
+	from := day.AddDate(0, 0, -1)
+	to := day.AddDate(0, 0, 1)
+
+	// a member sees the full team dashboard; a non-member gets ErrNotFound.
+	d, err := svc.GetTeamDashboard(ctx, alice, team.ID, from, to)
+	if err != nil {
+		t.Fatalf("team dashboard: %v", err)
+	}
+	if d.TotalLinks != 2 || d.ActiveLinks != 1 || d.DisabledLinks != 1 {
+		t.Errorf("cards = total %d active %d disabled %d, want 2/1/1", d.TotalLinks, d.ActiveLinks, d.DisabledLinks)
+	}
+	if d.LifetimeVisits != 50 {
+		t.Errorf("lifetime visits = %d, want 50", d.LifetimeVisits)
+	}
+	if d.WindowVisits != 12 || d.WindowUniques != 8 {
+		t.Errorf("window = %d visits / %d uniques, want 12/8", d.WindowVisits, d.WindowUniques)
+	}
+	if len(d.TopByVisits) != 2 || d.TopByVisits[0].Code != la.Code || d.TopByVisits[0].Visits != 10 {
+		t.Errorf("top by visits = %+v, want a first with 10", d.TopByVisits)
+	}
+	if len(d.TopByVisitors) != 2 || d.TopByVisitors[0].Code != la.Code || d.TopByVisitors[0].UniqueVisitors != 6 {
+		t.Errorf("top by visitors = %+v, want a first with 6", d.TopByVisitors)
+	}
+	browser := d.Environment["browser"]
+	if len(browser) != 1 || browser[0].Value != "Chrome" || browser[0].Visits != 8 {
+		t.Errorf("browser = %+v, want Chrome 8", browser)
+	}
+	if _, err := svc.GetTeamDashboard(ctx, bob, team.ID, from, to); !errors.Is(err, ErrNotFound) {
+		t.Errorf("non-member team dashboard = %v, want ErrNotFound", err)
+	}
+}
+
+func TestGetTeamStatsBreakdownsAndTopLinks(t *testing.T) {
+	svc, db, _ := newTestServiceFull(t)
+	ctx := context.Background()
+	alice := &domain.User{ID: 1, Username: "alice"}
+	bob := &domain.User{ID: 2, Username: "bob"}
+
+	team := &domain.Team{Name: "growth"}
+	if err := svc.teams.Create(ctx, team); err != nil {
+		t.Fatalf("create team: %v", err)
+	}
+	if err := svc.teams.AddMember(ctx, team.ID, alice.ID, domain.RoleOwner); err != nil {
+		t.Fatalf("add alice: %v", err)
+	}
+
+	la, err := svc.CreateLink(ctx, &team.ID, alice.ID, CreateLinkInput{Destination: "https://example.com/a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb, err := svc.CreateLink(ctx, &team.ID, alice.ID, CreateLinkInput{Destination: "https://example.com/b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// personal and other-user links must not leak into the team scope.
+	if _, err := svc.CreateLink(ctx, nil, alice.ID, CreateLinkInput{Destination: "https://example.com/personal"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateLink(ctx, nil, bob.ID, CreateLinkInput{Destination: "https://example.com/bob"}); err != nil {
+		t.Fatal(err)
+	}
+
+	day := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	_ = db.Create(&domain.DailyStats{Code: la.Code, Day: day, Visits: 8, UniqueVisitors: 6})
+	_ = db.Create(&domain.DailyStats{Code: lb.Code, Day: day, Visits: 4, UniqueVisitors: 4})
+	_ = db.Create(&domain.Breakdown{Code: la.Code, Day: day, Dimension: "referrer", Value: "google.com", Count: 5, UniqueVisitors: 3})
+	_ = db.Create(&domain.Breakdown{Code: lb.Code, Day: day, Dimension: "referrer", Value: "twitter.com", Count: 4, UniqueVisitors: 2})
+
+	from := day.AddDate(0, 0, -1)
+	to := day.AddDate(0, 0, 1)
+
+	b, err := svc.GetTeamStatsBreakdowns(ctx, alice, team.ID, "referrer", from, to, 0)
+	if err != nil {
+		t.Fatalf("team breakdowns: %v", err)
+	}
+	if len(b.Items) != 2 || b.Items[0].Value != "google.com" || b.Items[0].UniqueVisitors != 3 {
+		t.Errorf("items = %+v, want google.com uniques 3 first", b.Items)
+	}
+	if b.Total != 12 {
+		t.Errorf("total = %d, want 12", b.Total)
+	}
+
+	top, err := svc.GetTeamTopLinks(ctx, alice, team.ID, from, to, true, 0)
+	if err != nil {
+		t.Fatalf("team top links: %v", err)
+	}
+	if len(top) != 2 || top[0].Code != la.Code || top[0].Visits != 8 {
+		t.Errorf("top = %+v, want a first with 8", top)
+	}
+
+	if _, err := svc.GetTeamStatsBreakdowns(ctx, alice, team.ID, "bogus", from, to, 0); err == nil {
+		t.Error("bad dimension should be a validation error")
+	}
+	if _, err := svc.GetTeamStatsBreakdowns(ctx, bob, team.ID, "referrer", from, to, 0); !errors.Is(err, ErrNotFound) {
+		t.Errorf("non-member breakdowns = %v, want ErrNotFound", err)
+	}
+	if _, err := svc.GetTeamTopLinks(ctx, bob, team.ID, from, to, true, 0); !errors.Is(err, ErrNotFound) {
+		t.Errorf("non-member top links = %v, want ErrNotFound", err)
 	}
 }

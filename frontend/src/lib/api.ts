@@ -184,6 +184,39 @@ export const api = {
 		return req<Stats>(`teams/${id}/stats?${q}`);
 	},
 
+	async getTeamDashboard(id: number, from?: string, to?: string): Promise<DashboardStats> {
+		const q = new URLSearchParams();
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<DashboardStats>(`teams/${id}/dashboard?${q}`);
+	},
+
+	async getTeamStatsBreakdowns(
+		id: number,
+		dimension: string,
+		from?: string,
+		to?: string,
+		limit = 0
+	): Promise<StatsBreakdown> {
+		const q = new URLSearchParams({ dimension, limit: String(limit) });
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<StatsBreakdown>(`teams/${id}/stats/breakdowns?${q}`);
+	},
+
+	async getTeamTopLinks(
+		id: number,
+		from?: string,
+		to?: string,
+		metric: 'visits' | 'visitors' = 'visits',
+		limit = 0
+	): Promise<DashboardTopLink[]> {
+		const q = new URLSearchParams({ metric, limit: String(limit) });
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<DashboardTopLink[]>(`teams/${id}/stats/top-links?${q}`);
+	},
+
 	async login(username: string, password: string): Promise<void> {
 		const res = await fetch('/api/login', {
 			method: 'POST',
@@ -237,6 +270,14 @@ export const api = {
 
 	async getTeam(id: number): Promise<TeamDetail> {
 		return req<TeamDetail>(`teams/${id}`);
+	},
+
+	async renameTeam(id: number, name: string): Promise<TeamDetail> {
+		return req<TeamDetail>(`teams/${id}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ name })
+		});
 	},
 
 	async listTeamLinks(id: number): Promise<Link[]> {

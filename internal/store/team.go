@@ -40,6 +40,16 @@ func (s *TeamStore) Get(ctx context.Context, id int64) (*domain.Team, error) {
 	return &t, nil
 }
 
+// Rename updates a team's name, keeping its id and memberships.
+func (s *TeamStore) Rename(ctx context.Context, id int64, name string) error {
+	err := s.db.WithContext(ctx).Model(&domain.Team{}).
+		Where("id = ?", id).Update("name", name).Error
+	if isDuplicateKey(err) {
+		return ErrDuplicatedKey
+	}
+	return err
+}
+
 // ListForUser returns the teams a user belongs to, oldest first.
 func (s *TeamStore) ListForUser(ctx context.Context, userID int64) ([]domain.Team, error) {
 	var teams []domain.Team

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/barats/shrl-io/internal/domain"
+	"github.com/barats/shrl-io/internal/service"
 	"github.com/barats/shrl-io/internal/store"
 )
 
@@ -114,6 +115,36 @@ func (s *server) listTeams(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+// updateTeam renames a team (owner or admin; members get 403, outsiders 404).
+func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid team id")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := s.linkSvc.RenameTeam(r.Context(), currentUser(r), id, req.Name); err != nil {
+		if errors.Is(err, service.ErrConflict) {
+			writeError(w, http.StatusConflict, "team name already exists")
+			return
+		}
+		s.writeServiceError(w, err)
+		return
+	}
+	t, err := s.linkSvc.GetTeam(r.Context(), currentUser(r), id)
+	if err != nil {
+		s.writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
 }
 
 // getTeam returns a team with its members and roles.

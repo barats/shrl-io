@@ -12,7 +12,11 @@
 	import { ISO2_TO_CCN3 } from '$lib/world';
 	import { TriangleAlert } from '@lucide/svelte';
 
-	let { from, to }: { from: string; to: string } = $props();
+	let {
+		from,
+		to,
+		teamId
+	}: { from: string; to: string; teamId?: number } = $props();
 
 	// world-atlas countries-110m is a known Topology; decode to GeoJSON once.
 	// Paths are stable, so only the fill color reacts to the fetched data.
@@ -61,8 +65,10 @@
 	$effect(() => {
 		loading = true;
 		error = '';
-		api
-			.getStatsBreakdowns('country', from, to, 0)
+		const fetchCountries = teamId
+			? () => api.getTeamStatsBreakdowns(teamId, 'country', from, to, 0)
+			: () => api.getStatsBreakdowns('country', from, to, 0);
+		fetchCountries()
 			.then((b) => {
 				countryItems = b.items;
 				const m = new Map<string, { visits: number; unique_visitors: number }>();

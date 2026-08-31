@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/barats/shrl-io/internal/cache"
@@ -20,6 +21,9 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrForbidden means the caller can read the link but cannot manage it.
 	ErrForbidden = errors.New("forbidden")
+	// ErrConflict means the requested state already exists (e.g. a duplicate
+	// team name) and the caller should be told rather than retried silently.
+	ErrConflict = errors.New("conflict")
 )
 
 // ValidationError is a request-validation failure whose message is safe to
@@ -323,6 +327,31 @@ func (s *LinkService) GetTeam(ctx context.Context, u *domain.User, teamID int64)
 func (s *LinkService) TeamMember(ctx context.Context, u *domain.User, teamID int64) bool {
 	_, err := s.teams.MemberRole(ctx, teamID, u.ID)
 	return err == nil
+}
+
+// RenameTeam renames a team. Owners and admins may rename; other members get
+// ErrForbidden and outsiders ErrNotFound so team existence is not leaked.
+func (s *LinkService) RenameTeam(ctx context.Context, u *domain.User, teamID int64, name string) error {
+	if _, err := s.GetTeam(ctx, u, teamID); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 128 {
+		return &ValidationError{Msg: "team name must be 1-128 characters"}
+	}
+	if !u.IsAdmin {
+		role, err := s.teams.MemberRole(ctx, teamID, u.ID)
+		if err != nil || role != domain.RoleOwner {
+			return ErrForbidden
+		}
+	}
+	if err := s.teams.Rename(ctx, teamID, name); err != nil {
+		if errors.Is(err, store.ErrDuplicatedKey) {
+			return ErrConflict
+		}
+		return err
+	}
+	return nil
 }
 
 // LinkAnalytics is the read model for a link's analytics summary.

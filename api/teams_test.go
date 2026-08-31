@@ -382,3 +382,91 @@ func TestTeamDeletion(t *testing.T) {
 		t.Fatalf("creator read reverted link = %d, want 200", rec.Code)
 	}
 }
+
+func TestTeamRename(t *testing.T) {
+	s := newTestServer(t)
+	_, adminTok := newUser(t, s, "admin", true)
+	_, aliceTok := newUser(t, s, "alice", false)
+	_, carolTok := newUser(t, s, "carol", false)
+
+	do(t, s, "POST", "/teams", adminTok, map[string]any{"name": "growth"})
+	do(t, s, "POST", "/teams/1/members", adminTok, map[string]any{"username": "alice"})
+	do(t, s, "POST", "/teams", adminTok, map[string]any{"name": "dupe"})
+
+	// the owner renames
+	if rec := do(t, s, "PATCH", "/teams/1", adminTok, map[string]any{"name": "Growth v2"}); rec.Code != http.StatusOK {
+		t.Fatalf("owner rename = %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// a plain member cannot rename
+	if rec := do(t, s, "PATCH", "/teams/1", aliceTok, map[string]any{"name": "nope"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("member rename = %d, want 403", rec.Code)
+	}
+	// an outsider gets 404 so team existence is not leaked
+	if rec := do(t, s, "PATCH", "/teams/1", carolTok, map[string]any{"name": "nope"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("outsider rename = %d, want 404", rec.Code)
+	}
+	// a duplicate name conflicts
+	if rec := do(t, s, "PATCH", "/teams/1", adminTok, map[string]any{"name": "dupe"}); rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate rename = %d, want 409", rec.Code)
+	}
+	// a blank name is rejected
+	if rec := do(t, s, "PATCH", "/teams/1", adminTok, map[string]any{"name": "   "}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("blank rename = %d, want 400", rec.Code)
+	}
+	// the renamed name is persisted and readable
+	if rec := do(t, s, "GET", "/teams/1", adminTok, nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Growth v2") {
+		t.Fatalf("get renamed team = %d, body %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTeamDashboardEndpoints(t *testing.T) {
+	s := newTestServer(t)
+	_, adminTok := newUser(t, s, "admin", true)
+	_, aliceTok := newUser(t, s, "alice", false)
+	_, bobTok := newUser(t, s, "bob", false)
+
+	do(t, s, "POST", "/teams", adminTok, map[string]any{"name": "growth"})
+	do(t, s, "POST", "/teams/1/members", adminTok, map[string]any{"username": "alice"})
+	if rec := do(t, s, "POST", "/teams/1/links", aliceTok, map[string]any{"destination": "https://example.com"}); rec.Code != http.StatusCreated {
+		t.Fatalf("alice create team link = %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// a member reads the full team dashboard; personal isolation holds.
+	var d service.Dashboard
+	if rec := do(t, s, "GET", "/teams/1/dashboard", aliceTok, nil); rec.Code != 200 {
+		t.Fatalf("member team dashboard = %d, body %s", rec.Code, rec.Body.String())
+	} else {
+		decode(t, rec, &d)
+		if d.TotalLinks != 1 || d.ActiveLinks != 1 || d.DisabledLinks != 0 {
+			t.Errorf("cards = total %d active %d disabled %d, want 1/1/0", d.TotalLinks, d.ActiveLinks, d.DisabledLinks)
+		}
+	}
+
+	// an admin not in the team can still read it (instance oversight)
+	if rec := do(t, s, "GET", "/teams/1/dashboard", adminTok, nil); rec.Code != 200 {
+		t.Fatalf("admin oversight team dashboard = %d, want 200", rec.Code)
+	}
+	// an outsider gets 404 so team existence is not leaked
+	if rec := do(t, s, "GET", "/teams/1/dashboard", bobTok, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("outsider team dashboard = %d, want 404", rec.Code)
+	}
+
+	// breakdowns and top-links follow the same access rules
+	if rec := do(t, s, "GET", "/teams/1/stats/breakdowns?dimension=country", aliceTok, nil); rec.Code != 200 {
+		t.Fatalf("member team breakdowns = %d, want 200", rec.Code)
+	}
+	if rec := do(t, s, "GET", "/teams/1/stats/top-links?metric=visitors", aliceTok, nil); rec.Code != 200 {
+		t.Fatalf("member team top links = %d, want 200", rec.Code)
+	}
+	if rec := do(t, s, "GET", "/teams/1/stats/breakdowns?dimension=country", bobTok, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("outsider team breakdowns = %d, want 404", rec.Code)
+	}
+	if rec := do(t, s, "GET", "/teams/1/stats/top-links", bobTok, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("outsider team top links = %d, want 404", rec.Code)
+	}
+	// invalid dimension is rejected for members too
+	if rec := do(t, s, "GET", "/teams/1/stats/breakdowns?dimension=bogus", aliceTok, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid dimension = %d, want 400", rec.Code)
+	}
+}

@@ -23,7 +23,21 @@ export async function load({ request, url }) {
 	if (mustChangePassword && url.pathname !== '/account') {
 		throw redirect(303, '/account');
 	}
+	// The username quick-switch menu lists the caller's joined teams, so the
+	// root layout carries them for both the personal and team navbars.
+	let teams: { id: number; name: string; role: string }[] = [];
+	if (session) {
+		try {
+			const res = await apiFetch('teams', {
+				headers: { authorization: `Bearer ${session.token}` }
+			});
+			if (res.ok) teams = await res.json();
+		} catch {
+			/* backend unreachable: fall back to an empty list */
+		}
+	}
 	return {
-		user: session ? { username: session.username, isAdmin: session.isAdmin } : null
+		user: session ? { username: session.username, isAdmin: session.isAdmin } : null,
+		teams
 	};
 }
