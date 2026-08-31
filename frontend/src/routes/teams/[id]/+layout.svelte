@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import InlineNav from '$lib/components/InlineNav.svelte';
+	import MobileNav from '$lib/components/MobileNav.svelte';
 	import UserMenu from '$lib/components/UserMenu.svelte';
-	import { ChevronRight, Link2 } from '@lucide/svelte';
 
 	let { children, data } = $props();
 
@@ -15,10 +16,10 @@
 	}
 
 	const nav = $derived([
-		{ href: `/teams/${teamId}`, label: 'Overview' },
-		{ href: `/teams/${teamId}/links`, label: 'Links' },
-		{ href: `/teams/${teamId}/members`, label: 'Members' },
-		{ href: `/teams/${teamId}/settings`, label: 'Settings' }
+		{ href: `/teams/${teamId}`, label: 'Overview', active: isActive(`/teams/${teamId}`) },
+		{ href: `/teams/${teamId}/links`, label: 'Links', active: isActive(`/teams/${teamId}/links`) },
+		{ href: `/teams/${teamId}/members`, label: 'Members', active: isActive(`/teams/${teamId}/members`) },
+		{ href: `/teams/${teamId}/settings`, label: 'Settings', active: isActive(`/teams/${teamId}/settings`) }
 	]);
 </script>
 
@@ -30,27 +31,12 @@
 	<header class="border-b bg-background">
 		<div class="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
 			<div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-				<a href="/" class="flex items-center gap-1.5 text-lg font-semibold tracking-tight">
-					<Link2 class="size-5" />
-					<span class="hidden sm:inline">shrl.io</span>
+				<a href="/" class="hidden items-center text-lg font-semibold tracking-tight sm:flex">
+					shrl.io
 				</a>
-				<div class="flex items-center gap-1.5 text-sm text-muted-foreground">
-					<a href="/" class="hover:text-foreground">Personal</a>
-					<ChevronRight class="size-3.5" />
-					<span class="font-medium text-foreground">{team.name}</span>
-				</div>
-				<nav class="flex items-center gap-4">
-					{#each nav as item (item.href)}
-						<a
-							href={item.href}
-							class="text-sm {isActive(item.href)
-								? 'font-medium text-foreground'
-								: 'text-muted-foreground hover:text-foreground'}"
-						>
-							{item.label}
-						</a>
-					{/each}
-				</nav>
+				<MobileNav items={nav} />
+				<span class="max-w-40 truncate font-medium text-foreground">{team.name}</span>
+				<InlineNav items={nav} />
 			</div>
 			<UserMenu
 				username={data.user?.username ?? ''}
