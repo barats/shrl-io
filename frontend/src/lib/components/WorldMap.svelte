@@ -7,6 +7,8 @@
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { api } from '$lib/api';
+	import { countryLabel } from '$lib/countries';
+	import type { DashboardBreakdownItem } from '$lib/types';
 	import { ISO2_TO_CCN3 } from '$lib/world';
 	import { TriangleAlert } from '@lucide/svelte';
 
@@ -43,6 +45,7 @@
 	}
 
 	let counts = $state<Map<string, { visits: number; unique_visitors: number }>>(new Map());
+	let countryItems = $state<DashboardBreakdownItem[]>([]);
 	let maxVisitors = $state(0);
 	let unknownVisits = $state(0);
 	let loading = $state(true);
@@ -61,6 +64,7 @@
 		api
 			.getStatsBreakdowns('country', from, to, 0)
 			.then((b) => {
+				countryItems = b.items;
 				const m = new Map<string, { visits: number; unique_visitors: number }>();
 				let mx = 0;
 				let unknown = 0;
@@ -92,6 +96,17 @@
 		const step = Math.min(4, Math.floor((c.unique_visitors / maxVisitors) * 5));
 		return themeColor('--primary', 0.15 + step * 0.17);
 	}
+
+	// Compact companion list: top countries by visitors, matching the map's
+	// color scale. `unknown` has no map shape but belongs in the ranking.
+	const topCountries = $derived(
+		[...countryItems]
+			.sort((a, b) => b.unique_visitors - a.unique_visitors)
+			.slice(0, 10)
+	);
+	const hasCountryData = $derived(countryItems.length > 0);
+	const labelOf = $derived((v: string) => (v === 'unknown' ? 'Unknown' : countryLabel(v)));
+	const fmt = $derived((n: number) => n.toLocaleString('en-US'));
 </script>
 
 <Card class="mt-6 w-full">
@@ -109,46 +124,70 @@
 				<AlertDescription>{error}</AlertDescription>
 			</Alert>
 		{:else}
-			<div class="relative">
-				<svg
-					viewBox="0 0 960 480"
-					class="h-auto w-full"
-					role="img"
-					aria-label="World map of visitor origins by country"
-					onmousemove={(e) => {
-						const id = (e.target as SVGElement | null)?.getAttribute('data-id');
-						if (!id) return;
-						const s = byId.get(id);
-						if (!s) return;
-						const c = counts.get(id);
-						hover = {
-							name: s.name,
-							visits: c?.visits ?? 0,
-							visitors: c?.unique_visitors ?? 0,
-							x: e.clientX + 12,
-							y: e.clientY + 12
-						};
-					}}
-					onmouseleave={() => (hover = null)}
-				>
-					{#each shapes as s (s.id)}
-						<path
-							d={s.d}
-							fill={fill(s.id)}
-							data-id={s.id}
-							class="cursor-pointer transition-opacity hover:opacity-80"
-						></path>
-					{/each}
-				</svg>
-				{#if hover}
-					<div
-						class="pointer-events-none fixed z-50 rounded-md border bg-card px-2 py-1 text-xs text-foreground shadow-md"
-						style="left: {hover.x}px; top: {hover.y}px"
+			<div class="grid gap-6 {hasCountryData ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''}">
+				<div class="relative min-w-0">
+					<svg
+						viewBox="0 0 960 480"
+						class="h-auto w-full"
+						role="img"
+						aria-label="World map of visitor origins by country"
+						onmousemove={(e) => {
+							const id = (e.target as SVGElement | null)?.getAttribute('data-id');
+							if (!id) return;
+							const s = byId.get(id);
+							if (!s) return;
+							const c = counts.get(id);
+							hover = {
+								name: s.name,
+								visits: c?.visits ?? 0,
+								visitors: c?.unique_visitors ?? 0,
+								x: e.clientX + 12,
+								y: e.clientY + 12
+							};
+						}}
+						onmouseleave={() => (hover = null)}
 					>
-						<span class="font-medium">{hover.name}</span>
-						<span class="text-muted-foreground">
-							· {hover.visitors} visitors · {hover.visits} visits
-						</span>
+						{#each shapes as s (s.id)}
+							<path
+								d={s.d}
+								fill={fill(s.id)}
+								data-id={s.id}
+								class="cursor-pointer transition-opacity hover:opacity-80"
+							></path>
+						{/each}
+					</svg>
+					{#if hover}
+						<div
+							class="pointer-events-none fixed z-50 rounded-md border bg-card px-2 py-1 text-xs text-foreground shadow-md"
+							style="left: {hover.x}px; top: {hover.y}px"
+						>
+							<span class="font-medium">{hover.name}</span>
+							<span class="text-muted-foreground">
+								· {hover.visitors} visitors · {hover.visits} visits
+							</span>
+						</div>
+					{/if}
+				</div>
+				{#if hasCountryData}
+					<div class="min-w-0">
+						<div class="flex items-center justify-between gap-2 border-b pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+							<span>Country</span>
+							<span class="flex shrink-0 items-center gap-3">
+								<span class="w-12 text-right">Visits</span>
+								<span class="w-14 text-right">Visitors</span>
+							</span>
+						</div>
+						<ol class="mt-1.5 space-y-1">
+							{#each topCountries as it (it.value)}
+								<li class="flex items-center justify-between gap-2 text-sm">
+									<span class="truncate font-medium">{labelOf(it.value)}</span>
+									<span class="flex shrink-0 items-center gap-3 tabular-nums">
+										<span class="w-12 text-right text-muted-foreground">{fmt(it.visits)}</span>
+										<span class="w-14 text-right">{fmt(it.unique_visitors)}</span>
+									</span>
+								</li>
+							{/each}
+						</ol>
 					</div>
 				{/if}
 			</div>
