@@ -28,8 +28,8 @@
 		hrefs?: Record<string, string>;
 		// Which total the bar is scaled to: the ordering metric.
 		metric?: 'visits' | 'visitors';
-		// Opened by the centered "More" button, which only shows when the card
-		// holds more than `visibleRows` items.
+		// Opened by the centered "More" button, which always renders and opens
+		// the full breakdown dialog for this card's section.
 		onMore?: () => void;
 	} = $props();
 
@@ -37,7 +37,6 @@
 	const metricKey = $derived(metric === 'visits' ? 'visits' : 'unique_visitors');
 	const maxMetric = $derived(Math.max(1, ...items.map((it) => it[metricKey])));
 	const shown = $derived(items.slice(0, visibleRows));
-	const hasMore = $derived(items.length > visibleRows);
 </script>
 
 <Card class="flex h-full flex-col">
@@ -92,14 +91,12 @@
 				</div>
 			{/if}
 		</div>
-		{#if hasMore}
-			<button
-				type="button"
-				onclick={onMore}
-				class="mt-3 flex w-full items-center justify-center rounded-md py-1.5 text-sm font-medium text-primary hover:bg-muted"
-			>
-				More
-			</button>
-		{/if}
+		<button
+			type="button"
+			onclick={onMore}
+			class="mt-3 flex w-full items-center justify-center rounded-md py-1.5 text-sm font-medium text-primary hover:bg-muted"
+		>
+			More
+		</button>
 	</CardContent>
 </Card>

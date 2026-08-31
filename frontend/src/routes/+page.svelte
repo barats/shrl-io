@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
-	import BreakdownDialog, { type BreakdownDialogConfig } from '$lib/components/BreakdownDialog.svelte';
+	import BreakdownDialog, { type BreakdownSection } from '$lib/components/BreakdownDialog.svelte';
 	import RangeSelect from '$lib/components/RangeSelect.svelte';
 	import RankCard from '$lib/components/RankCard.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
@@ -32,7 +32,8 @@
 	let envTab = $state('browser');
 	let locTab = $state('country');
 	let topTab = $state<'visits' | 'visitors'>('visits');
-	let dialog = $state<BreakdownDialogConfig | null>(null);
+	let dialogOpen = $state(false);
+	let dialogInitial = $state<string>('links');
 
 	// The URL query is the single source of truth for the range; the effect
 	// rebuilds the range and refetches on mount, on selection, and on
@@ -102,52 +103,66 @@
 		return out;
 	}
 
-	function openTopLinksDialog() {
-		dialog = {
-			title: `Top Links — ${topTab}`,
-			metric: topTab,
-			fetcher: async () => {
-				const links = await api.getTopLinks(range.from, range.to, topTab, 0);
-				const hrefs: Record<string, string> = {};
-				const items = links.map((l) => {
-					hrefs[`${l.hostname}/${l.code}`] = `/links/${encodeURIComponent(l.code)}`;
-					return {
-						value: `${l.hostname}/${l.code}`,
-						visits: l.visits,
-						unique_visitors: l.unique_visitors
-					};
-				});
-				return { items, hrefs };
+	// The combined breakdown dialog's nav, config-driven so future dimensions
+	// (e.g. utm_*) can be added without touching the dialog itself. The
+	// fetchers close over the live `range`, so a dialog opened after a range
+	// change reads the current window.
+	const breakdownSections: BreakdownSection[] = [
+		{
+			id: 'links',
+			label: 'Top Links',
+			children: [
+				{ id: 'visits', label: 'Visits' },
+				{ id: 'visitors', label: 'Visitors' }
+			],
+			metric: (sub) => (sub === 'visits' ? 'visits' : 'visitors'),
+			fetcher: async (sub) => {
+				const m = sub === 'visits' ? 'visits' : 'visitors';
+				const links = await api.getTopLinks(range.from, range.to, m, 0);
+				return { items: topItems(links), hrefs: topHrefs(links) };
 			}
-		};
-	}
-
-	function openSourcesDialog() {
-		dialog = {
-			title: 'Sources',
+		},
+		{
+			id: 'sources',
+			label: 'Sources',
 			fetcher: async () => ({
 				items: (await api.getStatsBreakdowns('referrer', range.from, range.to, 0)).items
 			})
-		};
-	}
-
-	function openEnvDialog() {
-		dialog = {
-			title: `Environment — ${envTab}`,
-			fetcher: async () => ({
-				items: (await api.getStatsBreakdowns(envTab, range.from, range.to, 0)).items
+		},
+		{
+			id: 'environment',
+			label: 'Environment',
+			children: [
+				{ id: 'browser', label: 'Browser' },
+				{ id: 'os', label: 'OS' },
+				{ id: 'device', label: 'Device' }
+			],
+			fetcher: async (sub) => ({
+				items: (await api.getStatsBreakdowns(sub ?? 'browser', range.from, range.to, 0)).items
 			})
-		};
-	}
-
-	function openLocDialog() {
-		dialog = {
-			title: `Location — ${locTab}`,
-			valueFormatter: (v) => (locTab === 'country' ? countryLabel(v) : v),
-			fetcher: async () => ({
-				items: (await api.getStatsBreakdowns(locTab, range.from, range.to, 0)).items
+		},
+		{
+			id: 'location',
+			label: 'Location',
+			children: [
+				{ id: 'country', label: 'Country' },
+				{ id: 'region', label: 'Region' },
+				{ id: 'city', label: 'City' }
+			],
+			valueFormatter: (v, sub) => (sub === 'country' ? countryLabel(v) : v),
+			fetcher: async (sub) => ({
+				items: (await api.getStatsBreakdowns(sub ?? 'country', range.from, range.to, 0)).items
 			})
-		};
+		}
+	];
+
+	const dialogConfig = $derived(
+		dialogOpen ? { sections: breakdownSections, initial: dialogInitial } : null
+	);
+
+	function openDialog(id: string) {
+		dialogInitial = id;
+		dialogOpen = true;
 	}
 </script>
 
@@ -265,13 +280,13 @@
 				active={topTab}
 				onTabChange={(t) => (topTab = t as 'visits' | 'visitors')}
 				metric={topTab}
-				onMore={openTopLinksDialog}
+				onMore={() => openDialog('links')}
 			/>
 			<RankCard
 				title="Sources"
 				items={data.sources ?? []}
 				metric="visitors"
-				onMore={openSourcesDialog}
+				onMore={() => openDialog('sources')}
 			/>
 		</div>
 
@@ -284,7 +299,7 @@
 				active={envTab}
 				onTabChange={(t) => (envTab = t)}
 				metric="visitors"
-				onMore={openEnvDialog}
+				onMore={() => openDialog('environment')}
 			/>
 			<RankCard
 				title="Location"
@@ -294,7 +309,7 @@
 				onTabChange={(t) => (locTab = t)}
 				metric="visitors"
 				valueFormatter={(v) => (locTab === 'country' ? countryLabel(v) : v)}
-				onMore={openLocDialog}
+				onMore={() => openDialog('location')}
 			/>
 		</div>
 
@@ -304,8 +319,7 @@
 </div>
 
 <BreakdownDialog
-	open={dialog !== null}
-	config={dialog}
-	rangeKey={`${range.from}:${range.to}`}
-	onclose={() => (dialog = null)}
+	open={dialogOpen}
+	config={dialogConfig}
+	onclose={() => (dialogOpen = false)}
 />
