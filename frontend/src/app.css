@@ -126,4 +126,9 @@
 	html {
 		@apply font-sans;
 	}
+	/* Every non-disabled button is a clickable action; show the pointer
+	 * cursor on hover (links already get it from the browser default). */
+	button:not(:disabled) {
+		cursor: pointer;
+	}
 }
