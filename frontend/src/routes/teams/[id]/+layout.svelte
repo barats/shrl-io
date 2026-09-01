@@ -43,6 +43,7 @@
 				<UserMenu
 					username={data.user?.username ?? ''}
 					teams={data.teams ?? []}
+					isAdmin={data.user?.isAdmin ?? false}
 					currentTeamId={teamId}
 				/>
 			</div>

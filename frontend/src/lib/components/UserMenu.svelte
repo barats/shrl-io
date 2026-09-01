@@ -1,18 +1,21 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
-	import { ChevronDown, LogOut, UserRound, Users } from '@lucide/svelte';
+	import { ChevronDown, LogOut, Settings, UserRound, Users } from '@lucide/svelte';
 
 	// A quick-switch menu between the caller's Personal context and each Team
-	// they have joined. The trigger shows the username; opening it lists
-	// Personal plus the joined Teams (the current one marked) and Log out.
+	// they have joined, plus account links (Profile, admin-only Settings) and
+	// Log out. The trigger shows the username; opening it lists Personal plus
+	// the joined Teams (the current one marked) and Log out.
 	let {
 		username,
 		teams,
+		isAdmin = false,
 		currentTeamId = null
 	}: {
 		username: string;
 		teams: { id: number; name: string; role: string }[];
+		isAdmin?: boolean;
 		currentTeamId?: number | null;
 	} = $props();
 
@@ -103,6 +106,28 @@
 						{/if}
 					</button>
 				{/each}
+			{/if}
+
+			<div class="my-1 h-px bg-border"></div>
+			<button
+				type="button"
+				class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+				role="menuitem"
+				onclick={() => go('/profile')}
+			>
+				<UserRound class="size-4 text-muted-foreground" />
+				Profile
+			</button>
+			{#if isAdmin}
+				<button
+					type="button"
+					class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+					role="menuitem"
+					onclick={() => go('/settings')}
+				>
+					<Settings class="size-4 text-muted-foreground" />
+					Settings
+				</button>
 			{/if}
 
 			<div class="my-1 h-px bg-border"></div>

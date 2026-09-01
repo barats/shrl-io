@@ -18,11 +18,7 @@
 	const nav = $derived([
 		{ href: '/', label: 'Dashboard', active: path === '/' },
 		{ href: '/links', label: 'Links', active: path.startsWith('/links') },
-		{ href: '/teams', label: 'Teams', active: path.startsWith('/teams') },
-		{ href: '/profile', label: 'Profile', active: path.startsWith('/profile') },
-		...(data?.user?.isAdmin
-			? [{ href: '/settings', label: 'Settings', active: path.startsWith('/settings') }]
-			: [])
+		{ href: '/teams', label: 'Teams', active: path.startsWith('/teams') }
 	]);
 </script>
 
@@ -47,7 +43,12 @@
 				<div class="flex items-center gap-1">
 					<ThemeToggle />
 					{#if data?.user}
-						<UserMenu username={data.user.username} teams={data.teams ?? []} currentTeamId={null} />
+						<UserMenu
+							username={data.user.username}
+							teams={data.teams ?? []}
+							isAdmin={data.user.isAdmin}
+							currentTeamId={null}
+						/>
 					{/if}
 				</div>
 			</div>
