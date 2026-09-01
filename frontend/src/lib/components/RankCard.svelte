@@ -15,12 +15,16 @@
 		valueFormatter,
 		hrefs = {},
 		metric = 'visitors',
+		showVisitors = true,
+		showRank = false,
 		onMore
 	}: {
 		title: string;
 		items: DashboardBreakdownItem[];
 		empty?: string;
-		tabs?: string[];
+		// A tab is either a plain id (rendered as its own label) or an
+		// id/label pair for display names that differ from the id.
+		tabs?: Array<string | { id: string; label: string }>;
 		active?: string;
 		onTabChange?: (tab: string) => void;
 		valueFormatter?: (value: string) => string;
@@ -28,6 +32,11 @@
 		hrefs?: Record<string, string>;
 		// Which total the bar is scaled to: the ordering metric.
 		metric?: 'visits' | 'visitors';
+		// False when only visit counts are available (per-link breakdowns);
+		// hides the visitor count on each row.
+		showVisitors?: boolean;
+		// Prepend a 1-based rank number to each row (ranked lists like Top Links).
+		showRank?: boolean;
 		// Opened by the centered "More" button, which always renders and opens
 		// the full breakdown dialog for this card's section.
 		onMore?: () => void;
@@ -37,6 +46,7 @@
 	const metricKey = $derived(metric === 'visits' ? 'visits' : 'unique_visitors');
 	const maxMetric = $derived(Math.max(1, ...items.map((it) => it[metricKey])));
 	const shown = $derived(items.slice(0, visibleRows));
+	const showVisitorCount = $derived(showVisitors === true);
 </script>
 
 <Card class="flex h-full flex-col">
@@ -45,14 +55,16 @@
 		{#if tabs.length > 1}
 			<div class="flex items-center gap-1 rounded-md bg-muted p-1">
 				{#each tabs as tab (tab)}
+					{@const id = typeof tab === 'string' ? tab : tab.id}
+					{@const label = typeof tab === 'string' ? tab : tab.label}
 					<button
 						type="button"
-						class="rounded px-2 py-1 text-xs font-medium transition-colors {active === tab
+						class="rounded px-2 py-1 text-xs font-medium transition-colors {active === id
 							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => onTabChange?.(tab)}
+							: 'text-foreground/70 hover:text-foreground'}"
+						onclick={() => onTabChange?.(id)}
 					>
-						{tab}
+						{label}
 					</button>
 				{/each}
 			</div>
@@ -64,20 +76,27 @@
 				<p class="py-4 text-center text-sm text-muted-foreground">{empty}</p>
 			{:else}
 				<div class="space-y-3">
-					{#each shown as item (item.value)}
+					{#each shown as item, i (item.value)}
 						<div>
 							<div class="flex items-center justify-between gap-2 text-sm">
-								<span class="truncate font-medium">
-									{#if hrefs[item.value]}
-										<a href={hrefs[item.value]} class="text-primary hover:underline">
-											{display(item.value)}
-										</a>
-									{:else}
-										{display(item.value)}
+								<span class="flex min-w-0 items-center gap-2">
+									{#if showRank}
+										<span class="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+											{i + 1}
+										</span>
 									{/if}
+									<span class="truncate font-medium">
+										{#if hrefs[item.value]}
+											<a href={hrefs[item.value]} class="text-link hover:underline">
+												{display(item.value)}
+											</a>
+										{:else}
+											{display(item.value)}
+										{/if}
+									</span>
 								</span>
 								<span class="shrink-0 text-xs text-muted-foreground">
-									{item.visits} visits · {item.unique_visitors} visitors
+									{item.visits} visits{#if showVisitorCount} · {item.unique_visitors} visitors{/if}
 								</span>
 							</div>
 							<div class="mt-1 h-1.5 w-full rounded-full bg-muted">
@@ -94,7 +113,7 @@
 		<button
 			type="button"
 			onclick={onMore}
-			class="mt-3 flex w-full items-center justify-center rounded-md py-1.5 text-sm font-medium text-primary hover:bg-muted"
+			class="mt-3 flex w-full items-center justify-center rounded-md py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
 		>
 			More
 		</button>

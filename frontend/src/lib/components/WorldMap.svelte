@@ -15,8 +15,10 @@
 	let {
 		from,
 		to,
-		teamId
-	}: { from: string; to: string; teamId?: number } = $props();
+		teamId,
+		// When set, the map is scoped to a single link's country breakdown.
+		code
+	}: { from: string; to: string; teamId?: number; code?: string } = $props();
 
 	// world-atlas countries-110m is a known Topology; decode to GeoJSON once.
 	// Paths are stable, so only the fill color reacts to the fetched data.
@@ -65,16 +67,35 @@
 	$effect(() => {
 		loading = true;
 		error = '';
-		const fetchCountries = teamId
-			? () => api.getTeamStatsBreakdowns(teamId, 'country', from, to, 0)
-			: () => api.getStatsBreakdowns('country', from, to, 0);
+		// Per-link mode has visit counts only; the aggregate modes also carry
+		// unique visitors. uniques are set to the count so the fill scale and
+		// ranking stay correct in per-link mode.
+		const fetchCountries = code
+			? () =>
+					api.getBreakdowns(code, 'country', from, to).then((b) => {
+						const items: DashboardBreakdownItem[] = b.items.map((item) => {
+							const e = Object.entries(item)[0];
+							return {
+								value: e?.[0] ?? 'unknown',
+								visits: e?.[1] ?? 0,
+								unique_visitors: e?.[1] ?? 0
+							};
+						});
+						if (b.other > 0) {
+							items.push({ value: 'unknown', visits: b.other, unique_visitors: b.other });
+						}
+						return items;
+					})
+			: teamId
+				? () => api.getTeamStatsBreakdowns(teamId, 'country', from, to, 0).then((b) => b.items)
+				: () => api.getStatsBreakdowns('country', from, to, 0).then((b) => b.items);
 		fetchCountries()
-			.then((b) => {
-				countryItems = b.items;
+			.then((items) => {
+				countryItems = items;
 				const m = new Map<string, { visits: number; unique_visitors: number }>();
 				let mx = 0;
 				let unknown = 0;
-				for (const it of b.items) {
+				for (const it of items) {
 					if (it.value === 'unknown') {
 						unknown += it.visits;
 						continue;
@@ -103,11 +124,12 @@
 		return themeColor('--primary', 0.15 + step * 0.17);
 	}
 
-	// Compact companion list: top countries by visitors, matching the map's
-	// color scale. `unknown` has no map shape but belongs in the ranking.
+	// Compact companion list: top countries, matching the map's color scale.
+	// `unknown` has no map shape but belongs in the ranking.
+	const perLink = $derived(!!code);
 	const topCountries = $derived(
 		[...countryItems]
-			.sort((a, b) => b.unique_visitors - a.unique_visitors)
+			.sort((a, b) => (perLink ? b.visits - a.visits : b.unique_visitors - a.unique_visitors))
 			.slice(0, 10)
 	);
 	const hasCountryData = $derived(countryItems.length > 0);
@@ -118,7 +140,7 @@
 <Card class="mt-6 w-full">
 	<CardHeader>
 		<CardTitle>World Map</CardTitle>
-		<CardDescription>Visitors by country</CardDescription>
+		<CardDescription>{perLink ? 'Visits by country' : 'Visitors by country'}</CardDescription>
 	</CardHeader>
 	<CardContent>
 		{#if loading && counts.size === 0}
@@ -169,7 +191,11 @@
 						>
 							<span class="font-medium">{hover.name}</span>
 							<span class="text-muted-foreground">
-								· {hover.visitors} visitors · {hover.visits} visits
+								{#if perLink}
+									· {hover.visits} visits
+								{:else}
+									· {hover.visitors} visitors · {hover.visits} visits
+								{/if}
 							</span>
 						</div>
 					{/if}
@@ -180,7 +206,9 @@
 							<span>Country</span>
 							<span class="flex shrink-0 items-center gap-3">
 								<span class="w-12 text-right">Visits</span>
-								<span class="w-14 text-right">Visitors</span>
+								{#if !perLink}
+									<span class="w-14 text-right">Visitors</span>
+								{/if}
 							</span>
 						</div>
 						<ol class="mt-1.5 space-y-1">
@@ -189,7 +217,9 @@
 									<span class="truncate font-medium">{labelOf(it.value)}</span>
 									<span class="flex shrink-0 items-center gap-3 tabular-nums">
 										<span class="w-12 text-right text-muted-foreground">{fmt(it.visits)}</span>
-										<span class="w-14 text-right">{fmt(it.unique_visitors)}</span>
+										{#if !perLink}
+											<span class="w-14 text-right">{fmt(it.unique_visitors)}</span>
+										{/if}
 									</span>
 								</li>
 							{/each}

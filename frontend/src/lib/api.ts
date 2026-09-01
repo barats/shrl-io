@@ -112,8 +112,11 @@ export const api = {
 		});
 	},
 
-	async getAnalytics(code: string): Promise<AnalyticsResponse> {
-		return req<AnalyticsResponse>(`links/${encodeURIComponent(code)}/analytics`);
+	async getAnalytics(code: string, from?: string, to?: string): Promise<AnalyticsResponse> {
+		const q = new URLSearchParams();
+		if (from) q.set('from', from);
+		if (to) q.set('to', to);
+		return req<AnalyticsResponse>(`links/${encodeURIComponent(code)}/analytics?${q}`);
 	},
 
 	async getTimeseries(

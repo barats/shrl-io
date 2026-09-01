@@ -5,6 +5,7 @@
 	import BreakdownDialog, { type BreakdownSection } from '$lib/components/BreakdownDialog.svelte';
 	import RangeSelect from '$lib/components/RangeSelect.svelte';
 	import RankCard from '$lib/components/RankCard.svelte';
+	import Sparkline from '$lib/components/Sparkline.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
 	import WorldMap from '$lib/components/WorldMap.svelte';
 	import { countryLabel } from '$lib/countries';
@@ -245,13 +246,16 @@
 					<p class="text-2xl font-semibold">{data.disabled_links}</p>
 				</CardContent>
 			</Card>
-			<Card>
+			<Card class="bg-primary/5">
 				<CardHeader class="pb-2">
-					<CardTitle class="text-sm font-medium text-muted-foreground">Visits</CardTitle>
+					<CardTitle class="text-sm font-medium text-foreground/70">Visits</CardTitle>
 				</CardHeader>
 				<CardContent class="pt-0">
 					<p class="text-2xl font-semibold">{visitsCard}</p>
-					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
+					<p class="text-xs text-foreground/70">{presetLabel(range.preset)}</p>
+					{#if data.timeseries.length > 1}
+						<Sparkline rows={data.timeseries} class="mt-3 h-6 w-full text-primary" />
+					{/if}
 				</CardContent>
 			</Card>
 			<Card>
@@ -285,6 +289,7 @@
 				active={topTab}
 				onTabChange={(t) => (topTab = t as 'visits' | 'visitors')}
 				metric={topTab}
+				showRank
 				onMore={() => openDialog('links')}
 			/>
 			<RankCard

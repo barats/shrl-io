@@ -10,7 +10,7 @@
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
-	import { Copy, Download, TriangleAlert } from '@lucide/svelte';
+	import { Download, TriangleAlert } from '@lucide/svelte';
 
 	interface Props {
 		hostname: string;
@@ -23,7 +23,6 @@
 	const shortUrl = $derived(`https://${hostname}/${code}`);
 	let dataUrl = $state('');
 	let error = $state('');
-	let copied = $state(false);
 
 	onMount(render);
 
@@ -38,16 +37,6 @@
 			});
 		} catch (e) {
 			error = (e as Error).message;
-		}
-	}
-
-	async function copyUrl() {
-		try {
-			await navigator.clipboard.writeText(shortUrl);
-			copied = true;
-			setTimeout(() => (copied = false), 2000);
-		} catch {
-			/* clipboard unavailable */
 		}
 	}
 
@@ -85,14 +74,9 @@
 		{/if}
 		<div class="min-w-0 flex-1 space-y-2">
 			<p class="truncate text-sm font-medium">{shortUrl}</p>
-			<div class="flex flex-wrap gap-2">
-				<Button class="gap-2" disabled={!dataUrl} onclick={downloadPng}>
-					<Download class="size-4" /> Download PNG
-				</Button>
-				<Button variant="outline" class="gap-2" onclick={copyUrl}>
-					<Copy class="size-4" /> {copied ? 'Copied!' : 'Copy URL'}
-				</Button>
-			</div>
+			<Button class="gap-2" disabled={!dataUrl} onclick={downloadPng}>
+				<Download class="size-4" /> Download PNG
+			</Button>
 		</div>
 	</CardContent>
 </Card>

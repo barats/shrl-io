@@ -99,7 +99,7 @@
 								<TableCell class="font-medium">
 									<a
 										href={`/teams/${teamId}/links/${encodeURIComponent(link.code)}`}
-										class="inline-flex items-center gap-1.5 text-primary hover:underline"
+										class="inline-flex items-center gap-1.5 text-foreground hover:text-primary hover:underline"
 									>
 										<Link2 class="size-3.5" />
 										{link.hostname}/{link.code}

@@ -36,11 +36,15 @@
 	let {
 		open,
 		config,
-		onclose
+		onclose,
+		// False when only visit counts are available (per-link breakdowns);
+		// drops the Visitors column from the table.
+		showVisitors = true
 	}: {
 		open: boolean;
 		config: BreakdownDialogConfig | null;
 		onclose: () => void;
+		showVisitors?: boolean;
 	} = $props();
 
 	// The dialog's own selection, deliberately decoupled from the cards' tabs:
@@ -202,7 +206,7 @@
 							<button
 								type="button"
 								class="rounded-md px-2 py-1 text-left text-xs transition-colors {selectedChild === child.id && selected === sec.id
-									? 'bg-primary/10 font-medium text-primary'
+									? 'bg-muted font-medium text-foreground'
 									: 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
 								onclick={() => handleChildClick(sec.id, child.id)}
 							>
@@ -246,7 +250,7 @@
 				<Menu class="size-4" />
 			</Button>
 			<h2 class="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight">
-				{current?.label}{#if currentChild} — {currentChild.label}{/if}
+				{current?.label}{#if currentChild}&nbsp;-&nbsp;{currentChild.label}{/if}
 			</h2>
 			<Button
 				variant="ghost"
@@ -293,20 +297,30 @@
 						</p>
 					{:else}
 						<div class="rounded-md border">
-							<div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+							<div
+								class="grid items-center gap-3 border-b px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground {showVisitors
+									? 'grid-cols-[minmax(0,1fr)_auto_auto]'
+									: 'grid-cols-[minmax(0,1fr)_auto]'}"
+							>
 								<span>Label</span>
 								<span class="min-w-14 text-right">Visits</span>
-								<span class="min-w-14 text-right">Visitors</span>
+								{#if showVisitors}
+									<span class="min-w-14 text-right">Visitors</span>
+								{/if}
 							</div>
 							{#each pageItems as item (item.value)}
-								<div class="relative grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b px-4 py-2 last:border-b-0">
+								<div
+									class="relative grid items-center gap-3 border-b px-4 py-2 last:border-b-0 {showVisitors
+										? 'grid-cols-[minmax(0,1fr)_auto_auto]'
+										: 'grid-cols-[minmax(0,1fr)_auto]'}"
+								>
 									<div
 										class="absolute inset-y-0 left-0 bg-primary/10"
 										style="width: {pct(item)}%"
 									></div>
 									<span class="relative truncate text-sm font-medium">
 										{#if hrefs[item.value]}
-											<a href={hrefs[item.value]} class="text-primary hover:underline">
+											<a href={hrefs[item.value]} class="text-link hover:underline">
 												{display(item.value)}
 											</a>
 										{:else}
@@ -316,9 +330,11 @@
 									<span class="relative min-w-14 text-right text-sm tabular-nums">
 										{fmt(item.visits)}
 									</span>
-									<span class="relative min-w-14 text-right text-sm tabular-nums text-muted-foreground">
-										{fmt(item.unique_visitors)}
-									</span>
+									{#if showVisitors}
+										<span class="relative min-w-14 text-right text-sm tabular-nums text-muted-foreground">
+											{fmt(item.unique_visitors)}
+										</span>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -326,7 +342,7 @@
 				</div>
 				{#if items.length > PAGE_SIZE}
 					<div class="flex shrink-0 items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground md:px-5">
-						<span>Showing {rangeStart}–{rangeEnd} of {items.length}</span>
+						<span>Showing {rangeStart}-{rangeEnd} of {items.length}</span>
 						<div class="flex items-center gap-2">
 							<Button
 								variant="outline"
