@@ -9,6 +9,7 @@
 	import { api } from '$lib/api';
 	import { countryLabel } from '$lib/countries';
 	import type { DashboardBreakdownItem } from '$lib/types';
+	import { themeState } from '$lib/theme.svelte';
 	import { ISO2_TO_CCN3 } from '$lib/world';
 	import { TriangleAlert } from '@lucide/svelte';
 
@@ -124,6 +125,16 @@
 		return themeColor('--primary', 0.15 + step * 0.17);
 	}
 
+	// Recompute the country fills and the legend gradient when the data or the
+	// active theme changes, so the map stays in sync with light/dark mode.
+	const themed = $derived.by(() => {
+		void themeState.effectiveDark;
+		return {
+			fill: new Map(shapes.map((s) => [s.id, fill(s.id)])),
+			legend: `linear-gradient(to right, ${themeColor('--primary', 0.15)}, ${themeColor('--primary', 0.83)})`
+		};
+	});
+
 	// Compact companion list: top countries, matching the map's color scale.
 	// `unknown` has no map shape but belongs in the ranking.
 	const perLink = $derived(!!code);
@@ -178,7 +189,7 @@
 						{#each shapes as s (s.id)}
 							<path
 								d={s.d}
-								fill={fill(s.id)}
+								fill={themed.fill.get(s.id)}
 								data-id={s.id}
 								class="cursor-pointer transition-opacity hover:opacity-80"
 							></path>
@@ -231,7 +242,7 @@
 				<span>Fewer</span>
 				<div
 					class="h-2 w-40 rounded-full"
-					style="background: linear-gradient(to right, {themeColor('--primary', 0.15)}, {themeColor('--primary', 0.83)})"
+					style="background: {themed.legend}"
 				></div>
 				<span>More</span>
 				<span class="ml-2 inline-flex items-center gap-1.5">

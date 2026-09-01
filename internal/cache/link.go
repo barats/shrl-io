@@ -12,8 +12,10 @@ import (
 
 const keyPrefix = "link:"
 
-// Key is the Redis key for a link's redirect mapping.
-func Key(hostname, code string) string { return keyPrefix + hostname + ":" + code }
+// Key is the Redis key for a link's redirect mapping. Codes are globally
+// unique (ADR 0019), so the code alone identifies the mapping; the base URL
+// is a display attribute and never part of the routing key.
+func Key(code string) string { return keyPrefix + code }
 
 // cachedLink is the value stored for an active link: everything the
 // Redis-only redirector needs to serve a redirect. Stored as JSON.
@@ -34,20 +36,20 @@ func NewLinkCache(rdb *redis.Client) *LinkCache { return &LinkCache{rdb: rdb} }
 // disabled. Write-through from the API; also used by the cache warmer.
 func (c *LinkCache) Put(ctx context.Context, l *domain.Link) error {
 	if l.Disabled {
-		return c.rdb.Del(ctx, Key(l.Hostname, l.Code)).Err()
+		return c.rdb.Del(ctx, Key(l.Code)).Err()
 	}
 	b, err := json.Marshal(cachedLink{Destination: l.Destination, ForwardUTM: l.ForwardUTM})
 	if err != nil {
 		return err
 	}
-	return c.rdb.Set(ctx, Key(l.Hostname, l.Code), b, 0).Err()
+	return c.rdb.Set(ctx, Key(l.Code), b, 0).Err()
 }
 
 // Get returns the cached redirect mapping for a link. ok is false when the
 // key is absent (unknown or disabled link).
-func (c *LinkCache) Get(ctx context.Context, hostname, code string) (cachedLink, bool, error) {
+func (c *LinkCache) Get(ctx context.Context, code string) (cachedLink, bool, error) {
 	var cl cachedLink
-	b, err := c.rdb.Get(ctx, Key(hostname, code)).Bytes()
+	b, err := c.rdb.Get(ctx, Key(code)).Bytes()
 	if errors.Is(err, redis.Nil) {
 		return cl, false, nil
 	}
@@ -60,6 +62,6 @@ func (c *LinkCache) Get(ctx context.Context, hostname, code string) (cachedLink,
 	return cl, true, nil
 }
 
-func (c *LinkCache) Delete(ctx context.Context, hostname, code string) error {
-	return c.rdb.Del(ctx, Key(hostname, code)).Err()
+func (c *LinkCache) Delete(ctx context.Context, code string) error {
+	return c.rdb.Del(ctx, Key(code)).Err()
 }

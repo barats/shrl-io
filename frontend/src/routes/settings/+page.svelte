@@ -28,13 +28,13 @@
 
 	let me = $state<User | null>(null);
 
-	// Hostnames
-	let hostnames = $state<string[]>([]);
+	// Base URLs
+	let baseURLs = $state<string[]>([]);
 	let hLoading = $state(true);
 	let hError = $state('');
-	let newHostname = $state('');
-	let addingHostname = $state(false);
-	let hostnameError = $state('');
+	let newBaseURL = $state('');
+	let addingBaseURL = $state(false);
+	let baseURLError = $state('');
 
 	// Users
 	let users = $state<User[]>([]);
@@ -76,7 +76,7 @@
 		} catch {
 			/* session is required; the layout guards it */
 		}
-		await Promise.all([loadCodeLength(), loadHostnames(), loadUsers(), loadTeams()]);
+		await Promise.all([loadCodeLength(), loadBaseURLs(), loadUsers(), loadTeams()]);
 	});
 
 	async function loadCodeLength() {
@@ -108,11 +108,11 @@
 		}
 	}
 
-	async function loadHostnames() {
+	async function loadBaseURLs() {
 		hLoading = true;
 		hError = '';
 		try {
-			hostnames = await api.hostnames();
+			baseURLs = await api.baseURLs();
 		} catch (e) {
 			hError = (e as Error).message;
 		} finally {
@@ -120,28 +120,28 @@
 		}
 	}
 
-	async function addHostname() {
-		addingHostname = true;
-		hostnameError = '';
+	async function addBaseURL() {
+		addingBaseURL = true;
+		baseURLError = '';
 		try {
-			await api.createHostname(newHostname.trim());
-			newHostname = '';
-			await loadHostnames();
+			await api.createBaseURL(newBaseURL.trim());
+			newBaseURL = '';
+			await loadBaseURLs();
 		} catch (e) {
-			hostnameError = (e as Error).message;
+			baseURLError = (e as Error).message;
 		} finally {
-			addingHostname = false;
+			addingBaseURL = false;
 		}
 	}
 
-	async function removeHostname(name: string) {
-		if (!window.confirm(`Remove ${name} from the registry? Existing Links on it keep serving.`)) return;
-		hostnameError = '';
+	async function removeBaseURL(url: string) {
+		if (!window.confirm(`Remove ${url} from the registry? Existing Links on it keep serving.`)) return;
+		baseURLError = '';
 		try {
-			await api.deleteHostname(name);
-			await loadHostnames();
+			await api.deleteBaseURL(url);
+			await loadBaseURLs();
 		} catch (e) {
-			hostnameError = (e as Error).message;
+			baseURLError = (e as Error).message;
 		}
 	}
 
@@ -256,12 +256,12 @@
 </script>
 
 <svelte:head>
-	<title>Settings — shrl.io</title>
+	<title>Settings - shrl.io</title>
 </svelte:head>
 
 <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 <p class="mt-1 text-sm text-muted-foreground">
-	Instance administration: Code length, Hostnames, accounts, and Teams.
+	Instance administration: Code length, Base URLs, accounts, and Teams.
 </p>
 
 <div class="mt-6 space-y-6">
@@ -317,17 +317,18 @@
 
 	<Card>
 		<CardHeader>
-			<CardTitle>Hostnames</CardTitle>
+			<CardTitle>Base URLs</CardTitle>
 			<CardDescription>
-				Users select from the Registry when creating a Link; a Hostname is never typed.
-				Removing one only unregisters it — existing Links keep serving.
+				The public URL prefix under which Links are served (scheme, host, optional
+				port and path). Users select from the Registry when creating a Link.
+				Removing one only unregisters it - existing Links keep serving.
 			</CardDescription>
 		</CardHeader>
 		<CardContent>
-			{#if hostnameError}
+			{#if baseURLError}
 				<Alert variant="destructive" class="mb-4">
 					<TriangleAlert class="size-4" />
-					<AlertDescription>{hostnameError}</AlertDescription>
+					<AlertDescription>{baseURLError}</AlertDescription>
 				</Alert>
 			{/if}
 			{#if hLoading}
@@ -338,14 +339,14 @@
 				</div>
 			{:else}
 				<ul class="divide-y">
-					{#each hostnames as name (name)}
+					{#each baseURLs as url (url)}
 						<li class="flex items-center justify-between gap-2 py-2.5">
-							<code class="text-sm font-medium">{name}</code>
+							<code class="text-sm font-medium">{url}</code>
 							<Button
 								variant="ghost"
 								size="sm"
-								title="Remove hostname"
-								onclick={() => removeHostname(name)}
+								title="Remove base URL"
+								onclick={() => removeBaseURL(url)}
 							>
 								<Trash2 class="size-4" />
 							</Button>
@@ -356,18 +357,18 @@
 			<form
 				onsubmit={(e) => {
 					e.preventDefault();
-					addHostname();
+					addBaseURL();
 				}}
 				class="mt-4 flex gap-2"
 			>
 				<Input
-					placeholder="example.com"
-					bind:value={newHostname}
+					placeholder="https://example.com"
+					bind:value={newBaseURL}
 					class="flex-1"
-					aria-label="New hostname"
+					aria-label="New base URL"
 					required
 				/>
-				<Button type="submit" disabled={addingHostname}>
+				<Button type="submit" disabled={addingBaseURL}>
 					<Plus class="size-4" /> Register
 				</Button>
 			</form>

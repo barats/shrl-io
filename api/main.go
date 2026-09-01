@@ -25,7 +25,7 @@ type config struct {
 	internalSecret  string
 	adminUsername   string
 	adminPassword   string
-	defaultHostname string
+	defaultBaseURL  string
 	codeLength      int
 	retentionDays   int
 	tokenTTL        time.Duration
@@ -40,7 +40,7 @@ func loadConfig() config {
 		internalSecret:  env.Or("SHRL_API_INTERNAL_SECRET", "dev-internal-secret"),
 		adminUsername:   env.Or("SHRL_ADMIN_USERNAME", "admin"),
 		adminPassword:   os.Getenv("SHRL_ADMIN_PASSWORD"),
-		defaultHostname: env.Or("SHRL_DEFAULT_HOSTNAME", "localhost"),
+		defaultBaseURL:  env.Or("SHRL_DEFAULT_BASE_URL", "http://localhost:8080"),
 		codeLength:      env.Int("SHRL_CODE_LENGTH", domain.DefaultCodeLength),
 		retentionDays:   env.Int("SHRL_RETENTION_DAYS", 365),
 		tokenTTL:        time.Duration(env.Int("SHRL_TOKEN_TTL", 86400)) * time.Second,
@@ -52,7 +52,7 @@ type server struct {
 	links     *store.LinkStore
 	analytics *store.AnalyticsStore
 	users     *store.UserStore
-	hostnames *store.HostnameStore
+	baseURLs  *store.BaseURLStore
 	teams     *store.TeamStore
 	invites   *store.InviteStore
 	settings  *store.SettingStore
@@ -69,7 +69,7 @@ func main() {
 	links := store.NewLinkStore(db)
 	analytics := store.NewAnalyticsStore(db)
 	users := store.NewUserStore(db)
-	hostnames := store.NewHostnameStore(db)
+	baseURLs := store.NewBaseURLStore(db)
 	teams := store.NewTeamStore(db)
 	invites := store.NewInviteStore(db)
 	settings := store.NewSettingStore(db)
@@ -82,8 +82,8 @@ func main() {
 	if err := users.Migrate(ctx); err != nil {
 		log.Fatalf("migrate users: %v", err)
 	}
-	if err := hostnames.Migrate(ctx); err != nil {
-		log.Fatalf("migrate hostnames: %v", err)
+	if err := baseURLs.Migrate(ctx); err != nil {
+		log.Fatalf("migrate base urls: %v", err)
 	}
 	if err := teams.Migrate(ctx); err != nil {
 		log.Fatalf("migrate teams: %v", err)
@@ -95,13 +95,13 @@ func main() {
 		log.Fatalf("migrate settings: %v", err)
 	}
 	bootstrapAdmin(ctx, users, cfg)
-	bootstrapHostnames(ctx, hostnames, cfg)
+	bootstrapBaseURLs(ctx, baseURLs, cfg)
 	bootstrapSettings(ctx, settings, cfg)
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	linkSvc := service.NewLinkService(links, analytics, hostnames, teams, settings, linkCache, cfg.defaultHostname, cfg.retentionDays)
-	s := &server{links: links, analytics: analytics, users: users, hostnames: hostnames, teams: teams, invites: invites, settings: settings, linkCache: linkCache, linkSvc: linkSvc, cfg: cfg}
+	linkSvc := service.NewLinkService(links, analytics, baseURLs, teams, settings, linkCache, cfg.defaultBaseURL, cfg.retentionDays)
+	s := &server{links: links, analytics: analytics, users: users, baseURLs: baseURLs, teams: teams, invites: invites, settings: settings, linkCache: linkCache, linkSvc: linkSvc, cfg: cfg}
 
 	go func() {
 		warm(ctx, links, linkCache)
@@ -127,9 +127,9 @@ func (s *server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /users", s.createUser)
 	mux.HandleFunc("POST /links", s.createLink)
 	mux.HandleFunc("GET /links", s.listLinks)
-	mux.HandleFunc("GET /hostnames", s.listHostnames)
-	mux.HandleFunc("POST /hostnames", s.createHostname)
-	mux.HandleFunc("DELETE /hostnames/{hostname}", s.deleteHostname)
+	mux.HandleFunc("GET /base-urls", s.listBaseURLs)
+	mux.HandleFunc("POST /base-urls", s.createBaseURL)
+	mux.HandleFunc("DELETE /base-urls", s.deleteBaseURL)
 	mux.HandleFunc("GET /links/{code}", s.getLink)
 	mux.HandleFunc("PATCH /links/{code}", s.updateLink)
 	mux.HandleFunc("POST /links/{code}/disable", s.disableLink)
@@ -210,19 +210,19 @@ func bootstrapAdmin(ctx context.Context, users *store.UserStore, cfg config) {
 	log.Printf("provisioned admin user %q (password shown only once): %s", u.Username, password)
 }
 
-// bootstrapHostnames registers the default hostname in the registry so a fresh
-// instance always has a selectable hostname.
-func bootstrapHostnames(ctx context.Context, st *store.HostnameStore, cfg config) {
-	name, err := domain.NormalizeAndValidateHostname(cfg.defaultHostname)
+// bootstrapBaseURLs registers the default base URL in the registry so a fresh
+// instance always has a selectable base URL.
+func bootstrapBaseURLs(ctx context.Context, st *store.BaseURLStore, cfg config) {
+	baseURL, err := domain.NormalizeAndValidateBaseURL(cfg.defaultBaseURL)
 	if err != nil {
-		log.Printf("skip default hostname %q: %v", cfg.defaultHostname, err)
+		log.Printf("skip default base URL %q: %v", cfg.defaultBaseURL, err)
 		return
 	}
-	if _, err := st.Get(ctx, name); err == nil {
+	if _, err := st.Get(ctx, baseURL); err == nil {
 		return
 	}
-	if err := st.Create(ctx, &domain.Hostname{Name: name}); err != nil && !errors.Is(err, store.ErrDuplicatedKey) {
-		log.Printf("register default hostname: %v", err)
+	if err := st.Create(ctx, &domain.BaseURL{BaseURL: baseURL}); err != nil && !errors.Is(err, store.ErrDuplicatedKey) {
+		log.Printf("register default base URL: %v", err)
 	}
 }
 
@@ -270,7 +270,7 @@ func (s *server) writeServiceError(w http.ResponseWriter, err error) {
 // scoped to a Team (teamID non-nil) or Personal (teamID nil).
 func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamID *int64) {
 	var req struct {
-		Hostname    string `json:"hostname"`
+		BaseURL     string `json:"base_url"`
 		Destination string `json:"destination"`
 		Remark      string `json:"remark"`
 		ForwardUTM  bool   `json:"forward_utm"`
@@ -280,7 +280,7 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		return
 	}
 	l, err := s.linkSvc.CreateLink(r.Context(), teamID, currentUser(r).ID, service.CreateLinkInput{
-		Hostname:    req.Hostname,
+		BaseURL:     req.BaseURL,
 		Destination: req.Destination,
 		Remark:      req.Remark,
 		ForwardUTM:  req.ForwardUTM,

@@ -183,7 +183,7 @@ func (s *server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, l := range links {
-		s.linkCache.Delete(r.Context(), l.Hostname, l.Code)
+		s.linkCache.Delete(r.Context(), l.Code)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

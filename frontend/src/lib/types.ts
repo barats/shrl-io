@@ -1,5 +1,5 @@
 export interface Link {
-	hostname: string;
+	base_url: string;
 	code: string;
 	destination: string;
 	remark: string;
@@ -102,7 +102,7 @@ export interface Stats {
 // One link's window totals on the dashboard (top links rankings).
 export interface DashboardTopLink {
 	code: string;
-	hostname: string;
+	base_url: string;
 	visits: number;
 	unique_visitors: number;
 }

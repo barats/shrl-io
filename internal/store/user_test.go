@@ -70,8 +70,8 @@ func TestUserStoreAssignLinksToCreator(t *testing.T) {
 	ctx := context.Background()
 
 	// created_by is 0 for both of these (pre-ownership backfill targets)
-	_ = ls.Create(ctx, &domain.Link{Hostname: "localhost", Code: "one", Destination: "https://a.example"})
-	_ = ls.Create(ctx, &domain.Link{Hostname: "localhost", Code: "two", Destination: "https://b.example", CreatedBy: 5})
+	_ = ls.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "one", Destination: "https://a.example"})
+	_ = ls.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "two", Destination: "https://b.example", CreatedBy: 5})
 
 	u := &domain.User{Username: "admin"}
 	if err := us.Create(ctx, u); err != nil {

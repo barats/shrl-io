@@ -128,7 +128,7 @@
 </script>
 
 <svelte:head>
-	<title>Account — shrl.io</title>
+	<title>Account - shrl.io</title>
 </svelte:head>
 
 <h1 class="text-2xl font-semibold tracking-tight">Account</h1>

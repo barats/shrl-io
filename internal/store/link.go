@@ -13,7 +13,7 @@ import (
 // ErrNotFound is returned when a link does not exist.
 var ErrNotFound = errors.New("not found")
 
-// ErrDuplicatedKey is returned when a link with the same hostname+code already
+// ErrDuplicatedKey is returned when a link with the same code already
 // exists. It wraps the driver's unique-violation error.
 var ErrDuplicatedKey = errors.New("duplicate key")
 
@@ -89,7 +89,7 @@ func (s *LinkStore) Get(ctx context.Context, code string) (*domain.Link, error) 
 }
 
 // List returns the personal links (not assigned to a team) of one creator
-// across every hostname, newest first.
+// across every base URL, newest first.
 func (s *LinkStore) List(ctx context.Context, creatorID int64) ([]domain.Link, error) {
 	var links []domain.Link
 	err := s.db.WithContext(ctx).
@@ -98,7 +98,7 @@ func (s *LinkStore) List(ctx context.Context, creatorID int64) ([]domain.Link, e
 	return links, err
 }
 
-// ListByTeam returns the links of a team across every hostname, newest first.
+// ListByTeam returns the links of a team across every base URL, newest first.
 func (s *LinkStore) ListByTeam(ctx context.Context, teamID int64) ([]domain.Link, error) {
 	var links []domain.Link
 	err := s.db.WithContext(ctx).

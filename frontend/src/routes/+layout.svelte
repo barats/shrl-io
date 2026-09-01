@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import InlineNav from '$lib/components/InlineNav.svelte';
 	import MobileNav from '$lib/components/MobileNav.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import UserMenu from '$lib/components/UserMenu.svelte';
 
 	let { children, data } = $props();
@@ -43,9 +44,12 @@
 					<MobileNav items={nav} />
 					<InlineNav items={nav} />
 				</div>
-				{#if data?.user}
-					<UserMenu username={data.user.username} teams={data.teams ?? []} currentTeamId={null} />
-				{/if}
+				<div class="flex items-center gap-1">
+					<ThemeToggle />
+					{#if data?.user}
+						<UserMenu username={data.user.username} teams={data.teams ?? []} currentTeamId={null} />
+					{/if}
+				</div>
 			</div>
 		</header>
 	{/if}

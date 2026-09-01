@@ -35,7 +35,7 @@ func newTestServiceFull(t *testing.T) (*LinkService, *gorm.DB, *cache.LinkCache)
 	ctx := context.Background()
 	for _, migrate := range []func(context.Context) error{
 		store.NewLinkStore(db).Migrate,
-		store.NewHostnameStore(db).Migrate,
+		store.NewBaseURLStore(db).Migrate,
 		store.NewUserStore(db).Migrate,
 		store.NewTeamStore(db).Migrate,
 		store.NewAnalyticsStore(db).Migrate,
@@ -45,9 +45,9 @@ func newTestServiceFull(t *testing.T) (*LinkService, *gorm.DB, *cache.LinkCache)
 			t.Fatalf("migrate: %v", err)
 		}
 	}
-	hs := store.NewHostnameStore(db)
-	if err := hs.Create(ctx, &domain.Hostname{Name: "shrl.io"}); err != nil {
-		t.Fatalf("register hostname: %v", err)
+	bs := store.NewBaseURLStore(db)
+	if err := bs.Create(ctx, &domain.BaseURL{BaseURL: "https://shrl.io"}); err != nil {
+		t.Fatalf("register base URL: %v", err)
 	}
 	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	links := store.NewLinkStore(db)
@@ -55,7 +55,7 @@ func newTestServiceFull(t *testing.T) (*LinkService, *gorm.DB, *cache.LinkCache)
 	teams := store.NewTeamStore(db)
 	settings := store.NewSettingStore(db)
 	lc := cache.NewLinkCache(client)
-	svc := NewLinkService(links, analytics, hs, teams, settings, lc, "shrl.io", 30)
+	svc := NewLinkService(links, analytics, bs, teams, settings, lc, "https://shrl.io", 30)
 	return svc, db, lc
 }
 
@@ -67,13 +67,13 @@ func TestCreateLinkWritesCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if l.Hostname != "shrl.io" {
-		t.Errorf("hostname = %q, want default shrl.io", l.Hostname)
+	if l.BaseURL != "https://shrl.io" {
+		t.Errorf("base URL = %q, want default https://shrl.io", l.BaseURL)
 	}
 	if l.Code == "" {
 		t.Error("code should be auto-generated")
 	}
-	got, ok, err := lc.Get(ctx, l.Hostname, l.Code)
+	got, ok, err := lc.Get(ctx, l.Code)
 	if err != nil || !ok {
 		t.Fatalf("cache Get: ok=%v err=%v", ok, err)
 	}
@@ -86,10 +86,10 @@ func TestCreateLinkValidation(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	_, err := svc.CreateLink(ctx, nil, 1, CreateLinkInput{Hostname: "nope.io", Destination: "https://example.com"})
+	_, err := svc.CreateLink(ctx, nil, 1, CreateLinkInput{BaseURL: "https://nope.io", Destination: "https://example.com"})
 	var ve *ValidationError
-	if !errors.As(err, &ve) || ve.Msg != "hostname is not registered" {
-		t.Fatalf("unregistered hostname err = %v, want validation 'hostname is not registered'", err)
+	if !errors.As(err, &ve) || ve.Msg != "base URL is not registered" {
+		t.Fatalf("unregistered base URL err = %v, want validation 'base URL is not registered'", err)
 	}
 	if _, err := svc.CreateLink(ctx, nil, 1, CreateLinkInput{Destination: ""}); !errors.As(err, &ve) {
 		t.Fatalf("empty destination err = %v, want validation", err)
@@ -117,7 +117,7 @@ func TestPersonalLinkAccessAndCache(t *testing.T) {
 	if upd.Destination != "https://new.example.com" {
 		t.Errorf("updated destination = %q", upd.Destination)
 	}
-	if got, ok, _ := lc.Get(ctx, l.Hostname, l.Code); !ok || got.Destination != "https://new.example.com" {
+	if got, ok, _ := lc.Get(ctx, l.Code); !ok || got.Destination != "https://new.example.com" {
 		t.Errorf("cache not refreshed after update: ok=%v dest=%q", ok, got.Destination)
 	}
 
@@ -133,7 +133,7 @@ func TestPersonalLinkAccessAndCache(t *testing.T) {
 	if _, err := svc.SetDisabled(ctx, alice, l.Code, true); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
-	if _, ok, err := lc.Get(ctx, l.Hostname, l.Code); err != nil || ok {
+	if _, ok, err := lc.Get(ctx, l.Code); err != nil || ok {
 		t.Fatalf("disabled link should be evicted: ok=%v err=%v", ok, err)
 	}
 

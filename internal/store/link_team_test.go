@@ -16,9 +16,9 @@ func TestLinkStorePersonalListExcludesTeamLinks(t *testing.T) {
 
 	tid := int64(10)
 	links := []*domain.Link{
-		{Hostname: "localhost", Code: "one", Destination: "https://a.example", CreatedBy: 1},
-		{Hostname: "localhost", Code: "two", Destination: "https://b.example", CreatedBy: 1, TeamID: teamIDPtr(tid)},
-		{Hostname: "localhost", Code: "three", Destination: "https://c.example", CreatedBy: 2},
+		{BaseURL: "http://localhost:8080", Code: "one", Destination: "https://a.example", CreatedBy: 1},
+		{BaseURL: "http://localhost:8080", Code: "two", Destination: "https://b.example", CreatedBy: 1, TeamID: teamIDPtr(tid)},
+		{BaseURL: "http://localhost:8080", Code: "three", Destination: "https://c.example", CreatedBy: 2},
 	}
 	for _, l := range links {
 		if err := s.Create(ctx, l); err != nil {
@@ -42,10 +42,10 @@ func TestLinkStoreListByTeam(t *testing.T) {
 	tid := int64(10)
 	other := int64(11)
 	links := []*domain.Link{
-		{Hostname: "localhost", Code: "one", Destination: "https://a.example", CreatedBy: 1, TeamID: teamIDPtr(tid)},
-		{Hostname: "localhost", Code: "two", Destination: "https://b.example", CreatedBy: 2, TeamID: teamIDPtr(tid)},
-		{Hostname: "localhost", Code: "three", Destination: "https://c.example", CreatedBy: 1, TeamID: teamIDPtr(other)},
-		{Hostname: "localhost", Code: "four", Destination: "https://d.example", CreatedBy: 1},
+		{BaseURL: "http://localhost:8080", Code: "one", Destination: "https://a.example", CreatedBy: 1, TeamID: teamIDPtr(tid)},
+		{BaseURL: "http://localhost:8080", Code: "two", Destination: "https://b.example", CreatedBy: 2, TeamID: teamIDPtr(tid)},
+		{BaseURL: "http://localhost:8080", Code: "three", Destination: "https://c.example", CreatedBy: 1, TeamID: teamIDPtr(other)},
+		{BaseURL: "http://localhost:8080", Code: "four", Destination: "https://d.example", CreatedBy: 1},
 	}
 	for _, l := range links {
 		if err := s.Create(ctx, l); err != nil {
@@ -72,9 +72,9 @@ func TestLinkStoreTransferTeamLinksToPersonal(t *testing.T) {
 	ctx := context.Background()
 
 	tid := int64(10)
-	_ = s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "one", Destination: "https://a.example", CreatedBy: 1, TeamID: teamIDPtr(tid)})
-	_ = s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "two", Destination: "https://b.example", CreatedBy: 2, TeamID: teamIDPtr(tid)})
-	_ = s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "three", Destination: "https://c.example", CreatedBy: 3})
+	_ = s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "one", Destination: "https://a.example", CreatedBy: 1, TeamID: teamIDPtr(tid)})
+	_ = s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "two", Destination: "https://b.example", CreatedBy: 2, TeamID: teamIDPtr(tid)})
+	_ = s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "three", Destination: "https://c.example", CreatedBy: 3})
 
 	if err := s.TransferTeamLinksToPersonal(ctx, tid); err != nil {
 		t.Fatalf("transfer: %v", err)

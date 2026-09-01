@@ -4,7 +4,7 @@
 </script>
 
 <svelte:head>
-	<title>{page.status === 404 ? 'Page not found — shrl.io' : 'Something went wrong — shrl.io'}</title>
+	<title>{page.status === 404 ? 'Page not found - shrl.io' : 'Something went wrong - shrl.io'}</title>
 </svelte:head>
 
 <div class="flex min-h-[60vh] items-center justify-center">

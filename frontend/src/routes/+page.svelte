@@ -7,6 +7,7 @@
 	import RankCard from '$lib/components/RankCard.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
+	import VisitsEmptyState from '$lib/components/VisitsEmptyState.svelte';
 	import WorldMap from '$lib/components/WorldMap.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Button } from '$lib/components/ui/button';
@@ -88,9 +89,11 @@
 		range.preset === 'all' ? (data?.lifetime_visits ?? 0) : (data?.window_visits ?? 0)
 	);
 
+	const chartRows = $derived(bucketTimeseries(data?.timeseries ?? [], range.from, range.to));
+
 	function topItems(links: DashboardTopLink[]): DashboardBreakdownItem[] {
 		return links.map((l) => ({
-			value: `${l.hostname}/${l.code}`,
+			value: `${l.base_url}/${l.code}`,
 			visits: l.visits,
 			unique_visitors: l.unique_visitors
 		}));
@@ -99,7 +102,7 @@
 	function topHrefs(links: DashboardTopLink[]): Record<string, string> {
 		const out: Record<string, string> = {};
 		for (const l of links) {
-			out[`${l.hostname}/${l.code}`] = `/links/${encodeURIComponent(l.code)}`;
+			out[`${l.base_url}/${l.code}`] = `/links/${encodeURIComponent(l.code)}`;
 		}
 		return out;
 	}
@@ -168,7 +171,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard — shrl.io</title>
+	<title>Dashboard - shrl.io</title>
 </svelte:head>
 
 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -270,7 +273,11 @@
 				<CardTitle>Visits & Visitors ({presetLabel(range.preset)})</CardTitle>
 			</CardHeader>
 			<CardContent>
-				<StatsChart rows={bucketTimeseries(data.timeseries, range.from, range.to)} />
+				{#if chartRows.length === 0}
+					<VisitsEmptyState />
+				{:else}
+					<StatsChart rows={chartRows} />
+				{/if}
 			</CardContent>
 		</Card>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import {
 		BarController,
 		BarElement,
@@ -10,6 +10,7 @@
 		Tooltip
 	} from 'chart.js';
 	import type { TimeseriesRow } from '$lib/types';
+	import { themeState } from '$lib/theme.svelte';
 
 	Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -107,18 +108,15 @@
 		chart = null;
 	});
 
-	// Re-resolve the token colors when the OS color scheme flips, so an open
-	// chart keeps matching the active palette (light/dark).
-	onMount(() => {
-		const scheme = window.matchMedia('(prefers-color-scheme: dark)');
-		const onSchemeChange = () => {
-			if (!chart) return;
-			chart.data.datasets[0].backgroundColor = themeColor('--primary', 0.85);
-			chart.data.datasets[1].backgroundColor = themeColor('--muted-foreground', 0.45);
-			chart.update();
-		};
-		scheme.addEventListener('change', onSchemeChange);
-		onDestroy(() => scheme.removeEventListener('change', onSchemeChange));
+	// Re-resolve the token colors when the theme flips (light/dark toggle or
+	// OS change), so an open chart keeps matching the active palette. The
+	// `dark` class on <html> has already swapped the CSS variables.
+	$effect(() => {
+		themeState.effectiveDark;
+		if (!chart) return;
+		chart.data.datasets[0].backgroundColor = themeColor('--primary', 0.85);
+		chart.data.datasets[1].backgroundColor = themeColor('--muted-foreground', 0.45);
+		chart.update();
 	});
 </script>
 

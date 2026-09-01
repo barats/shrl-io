@@ -6,12 +6,14 @@
 	import BreakdownDialog, {
 		type BreakdownSection
 	} from '$lib/components/BreakdownDialog.svelte';
-	import LinkQR from '$lib/components/LinkQR.svelte';
+	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import RangeSelect from '$lib/components/RangeSelect.svelte';
 	import RankCard from '$lib/components/RankCard.svelte';
 	import StatsChart from '$lib/components/StatsChart.svelte';
+	import VisitsEmptyState from '$lib/components/VisitsEmptyState.svelte';
 	import WorldMap from '$lib/components/WorldMap.svelte';
 	import { countryLabel } from '$lib/countries';
+	import { qrDataUrl, downloadDataUrl } from '$lib/qr';
 	import {
 		bucketTimeseries,
 		isRangePreset,
@@ -34,7 +36,6 @@
 	import {
 		Card,
 		CardContent,
-		CardDescription,
 		CardHeader,
 		CardTitle
 	} from '$lib/components/ui/card';
@@ -46,13 +47,15 @@
 	import {
 		ChevronLeft,
 		Copy,
+		Download,
 		ExternalLink,
-		Link2,
+		Pencil,
 		Power,
 		PowerOff,
 		Save,
 		Trash2,
-		TriangleAlert
+		TriangleAlert,
+		X
 	} from '@lucide/svelte';
 
 	const RANGE_KEY = 'shrl:range:preset';
@@ -68,6 +71,7 @@
 	let editDestination = $state('');
 	let editRemark = $state('');
 	let editForwardUTM = $state(false);
+	let editOpen = $state(false);
 	let saving = $state(false);
 	let saveError = $state('');
 	let saved = $state(false);
@@ -88,6 +92,7 @@
 
 	let dialogOpen = $state(false);
 	let dialogInitial = $state('sources');
+	let confirmRequest = $state<ConfirmRequest | null>(null);
 
 	let copied = $state(false);
 
@@ -98,10 +103,31 @@
 	let locSeq = 0;
 	let campSeq = 0;
 
-	const hostname = $derived(link?.hostname ?? '');
-	const shortUrl = $derived(link ? `https://${hostname}/${code}` : '');
+	const baseURL = $derived(link?.base_url ?? '');
+	const shortUrl = $derived(link ? `${baseURL}/${code}` : '');
 	const backHref = $derived(teamId ? `/teams/${teamId}` : '/links');
 	const backLabel = $derived(team ? team.name : 'All links');
+
+	// The QR code for the short URL, generated in the browser once the Link
+	// loads; shown in the card header and downloadable from the action row.
+	let qr = $state('');
+	let qrError = $state('');
+
+	$effect(() => {
+		if (!link) return;
+		qr = '';
+		qrError = '';
+		qrDataUrl(`${link.base_url}/${code}`)
+			.then((d) => (qr = d))
+			.catch((e) => (qrError = (e as Error).message));
+	});
+
+	function downloadQrPng() {
+		if (!qr) return;
+		const safe = baseURL.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+		downloadDataUrl(qr, `${safe}-${code}.png`);
+	}
+
 	const canManage = $derived(
 		!!link &&
 			(teamId
@@ -109,6 +135,15 @@
 					team?.members.find((m) => m.id === me?.id)?.role === 'owner'
 				: true)
 	);
+
+	// Clear stale save feedback as soon as the user edits any field again.
+	$effect(() => {
+		editDestination;
+		editRemark;
+		editForwardUTM;
+		saved = false;
+		saveError = '';
+	});
 
 	// The URL query is the single source of truth for the range; the effect
 	// rebuilds the range and refetches analytics on mount, on selection, and
@@ -330,18 +365,56 @@
 		}
 	}
 
-	async function toggleDisabled() {
+	// Expand/collapse the edit form; collapsing discards unsaved edits.
+	function toggleEdit() {
+		if (editOpen) {
+			editDestination = link?.destination ?? '';
+			editRemark = link?.remark ?? '';
+			editForwardUTM = link?.forward_utm ?? false;
+			saved = false;
+			saveError = '';
+		}
+		editOpen = !editOpen;
+	}
+
+	async function enable() {
 		if (!link) return;
 		try {
-			link = await api.setDisabled(code, !link.disabled);
+			link = await api.setDisabled(code, false);
 		} catch (e) {
 			error = (e as Error).message;
 		}
 	}
 
+	// The Disable and Delete actions confirm via an in-app dialog first.
+	function confirmDisable() {
+		confirmRequest = {
+			title: 'Disable this Link?',
+			description: `${baseURL}/${code} will stop redirecting and return 404 from the redirector. You can enable it again later.`,
+			confirmLabel: 'Disable',
+			action: async () => {
+				if (!link) return;
+				try {
+					link = await api.setDisabled(code, true);
+				} catch (e) {
+					error = (e as Error).message;
+				}
+			}
+		};
+	}
+
+	function confirmDelete() {
+		confirmRequest = {
+			title: 'Delete this Link?',
+			description: `Permanently removes ${baseURL}/${code}. Its Code is never reused. This cannot be undone.`,
+			confirmLabel: 'Delete',
+			destructive: true,
+			action: remove
+		};
+	}
+
 	async function remove() {
 		if (!link) return;
-		if (!window.confirm(`Delete ${link.hostname}/${code}? This cannot be undone.`)) return;
 		try {
 			await api.deleteLink(code);
 			await goto(backHref);
@@ -360,7 +433,7 @@
 </script>
 
 <svelte:head>
-	<title>{hostname ? `${hostname}/${code}` : 'Link'} - shrl.io</title>
+	<title>{baseURL ? `${baseURL}/${code}` : 'Link'} - shrl.io</title>
 </svelte:head>
 
 {#if loading}
@@ -385,26 +458,58 @@
 		<AlertDescription>{error}</AlertDescription>
 	</Alert>
 {:else if link}
-	<!-- Identity block: the short URL is the artifact, so it leads. -->
-	<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
-		<div class="min-w-0">
+	<!-- The Link, its QR, and its settings in one card before Analytics. -->
+	<Card>
+		<CardHeader class="gap-3">
 			<a
 				href={backHref}
 				class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline"
 			>
 				<ChevronLeft class="size-4" /> {backLabel}
 			</a>
-			<div class="mt-3 flex flex-wrap items-center gap-3">
-				<h1 class="min-w-0 break-all text-3xl font-semibold tracking-tight">
-					{hostname}/{code}
-				</h1>
-				{#if link.disabled}
-					<Badge variant="secondary">Disabled</Badge>
-				{:else}
-					<Badge>Active</Badge>
-				{/if}
+			<div class="flex flex-wrap items-start justify-between gap-4">
+				<div class="min-w-0">
+					<div class="flex flex-wrap items-center gap-3">
+						<h1 class="min-w-0 break-all font-mono text-2xl font-semibold tracking-tight">
+							{baseURL}/{code}
+						</h1>
+						{#if link.disabled}
+							<Badge variant="secondary">Disabled</Badge>
+						{:else}
+							<Badge>Active</Badge>
+						{/if}
+					</div>
+					<p class="mt-2 text-sm text-muted-foreground">
+						Created {link.created_at.slice(0, 10)} · Updated {link.updated_at.slice(0, 10)}
+					</p>
+					{#if teamId && !canManage}
+						<p class="mt-1 text-sm text-muted-foreground">
+							Read-only, managed by its Creator or a Team Owner.
+						</p>
+					{/if}
+					{#if link.remark}
+						<p class="mt-2 text-sm text-foreground/90">{link.remark}</p>
+					{/if}
+				</div>
+				<div class="shrink-0">
+					{#if qr}
+						<img
+							src={qr}
+							alt={`QR code for ${shortUrl}`}
+							class="size-20 rounded-lg border bg-white p-1"
+						/>
+					{:else if qrError}
+						<div
+							class="flex size-20 items-center justify-center rounded-lg border p-1 text-center text-xs text-muted-foreground"
+						>
+							QR unavailable
+						</div>
+					{:else}
+						<div class="size-20 animate-pulse rounded-lg border bg-muted"></div>
+					{/if}
+				</div>
 			</div>
-			<div class="mt-4 flex flex-wrap gap-2">
+			<div class="flex flex-wrap gap-2">
 				<Button onclick={copyShortUrl} class="gap-2">
 					<Copy class="size-4" /> {copied ? 'Copied!' : 'Copy short URL'}
 				</Button>
@@ -417,23 +522,120 @@
 				>
 					<ExternalLink class="size-4" /> Open destination
 				</Button>
+				<Button variant="outline" class="gap-2" disabled={!qr} onclick={downloadQrPng}>
+					<Download class="size-4" /> Download PNG
+				</Button>
+				{#if canManage}
+					<Button
+						variant={editOpen ? 'secondary' : 'outline'}
+						class="gap-2"
+						onclick={toggleEdit}
+						aria-expanded={editOpen}
+						aria-controls="link-edit"
+					>
+						{#if editOpen}
+							<X class="size-4" /> Close
+						{:else}
+							<Pencil class="size-4" /> Edit
+						{/if}
+					</Button>
+				{/if}
 			</div>
-			<p class="mt-3 text-sm text-muted-foreground">
-				Created {link.created_at.slice(0, 10)} · Updated {link.updated_at.slice(0, 10)}
-			</p>
-			{#if teamId && !canManage}
-				<p class="mt-1 text-sm text-muted-foreground">
-					Read-only, managed by its Creator or a Team Owner.
-				</p>
+		</CardHeader>
+		{#if editOpen}
+			<CardContent id="link-edit">
+			<Separator class="mb-5" />
+			{#if saveError}
+				<Alert variant="destructive" class="mb-4">
+					<TriangleAlert class="size-4" />
+					<AlertDescription>{saveError}</AlertDescription>
+				</Alert>
 			{/if}
-			{#if link.remark}
-				<p class="mt-2 text-sm text-foreground/90">{link.remark}</p>
-			{/if}
-		</div>
-		<div class="w-full lg:w-80">
-			<LinkQR {hostname} {code} />
-		</div>
-	</div>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					saveSettings();
+				}}
+			>
+				<div class="grid gap-x-6 gap-y-4 lg:grid-cols-2">
+					<div class="space-y-3">
+						<div class="space-y-2">
+							<Label for="destination">Destination URL</Label>
+							<Input
+								id="destination"
+								bind:value={editDestination}
+								class="w-full"
+								required
+								disabled={!canManage}
+							/>
+						</div>
+						<div class="space-y-2">
+							<Label for="remark">Remark (optional)</Label>
+							<Input
+								id="remark"
+								bind:value={editRemark}
+								placeholder="What this Link is for"
+								disabled={!canManage}
+							/>
+						</div>
+					</div>
+					<div class="space-y-3">
+						<div class="flex items-start gap-2">
+							<Checkbox
+								id="forward-utm"
+								bind:checked={editForwardUTM}
+								disabled={!canManage}
+								class="mt-0.5"
+							/>
+							<Label
+								for="forward-utm"
+								class="font-normal leading-snug text-muted-foreground"
+							>
+								Forward UTM parameters from the short URL to the Destination
+							</Label>
+						</div>
+						<div class="space-y-2">
+							<p class="text-sm font-medium">
+								{link.disabled ? 'Currently Disabled' : 'Currently Active'}
+							</p>
+							<p class="text-xs text-muted-foreground">
+								{link.disabled
+									? 'This Link returns 404 from the redirector. Enable it to restore redirects.'
+									: 'This Link redirects visitors to its Destination.'}
+							</p>
+							{#if canManage}
+								{#if link.disabled}
+									<Button variant="default" onclick={enable}>
+										<Power class="size-4" /> Enable
+									</Button>
+								{:else}
+									<Button variant="secondary" onclick={confirmDisable}>
+										<PowerOff class="size-4" /> Disable
+									</Button>
+								{/if}
+							{/if}
+						</div>
+					</div>
+				</div>
+				{#if canManage}
+					<div class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+						<Button variant="destructive" type="button" onclick={confirmDelete}>
+							<Trash2 class="size-4" /> Delete
+						</Button>
+						<div class="flex items-center gap-3">
+							{#if saved}
+								<p class="text-sm text-green-600">Link saved.</p>
+							{/if}
+							<Button type="submit" disabled={saving}>
+								<Save class="size-4" /> {saving ? 'Saving…' : 'Save'}
+							</Button>
+						</div>
+					</div>
+				{/if}
+			</form>
+			</CardContent>
+		{/if}
+	</Card>
 
 	<!-- Analytics: full dashboard parity scoped to this link. -->
 	<div class="mt-8">
@@ -511,14 +713,7 @@
 					{#if analyticsLoading && !analytics}
 						<Skeleton class="h-40 w-full" />
 					{:else if totalVisits === 0}
-						<div class="flex flex-col items-center gap-2 py-10 text-center">
-							<Link2 class="size-6 text-muted-foreground" />
-							<p class="text-sm font-medium">No visits in this period</p>
-							<p class="max-w-xs text-xs text-muted-foreground">
-								Share this link to start collecting visits. Bots and link-preview unfurlers
-								are excluded.
-							</p>
-						</div>
+						<VisitsEmptyState scope="link" />
 					{:else}
 						<StatsChart rows={bucketTimeseries(timeseries, range.from, range.to)} />
 					{/if}
@@ -580,110 +775,12 @@
 		</div>
 	</div>
 
-	<!-- Settings, with the destructive actions isolated at the bottom. -->
-	<div class="mt-10">
-		<Separator class="mb-6" />
-		<h2 class="text-lg font-semibold tracking-tight">Settings</h2>
-		<div class="mt-4 space-y-6">
-			<Card class="max-w-2xl">
-				<CardHeader>
-					<CardTitle>Destination & remark</CardTitle>
-					<CardDescription>
-						Where this Link redirects to, and the note for it.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{#if saveError}
-						<Alert variant="destructive" class="mb-4">
-							<TriangleAlert class="size-4" />
-							<AlertDescription>{saveError}</AlertDescription>
-						</Alert>
-					{/if}
-					<form
-						onsubmit={(e) => {
-							e.preventDefault();
-							saveSettings();
-						}}
-						class="space-y-3"
-					>
-						<div class="space-y-2">
-							<Label for="destination">Destination URL</Label>
-							<div class="flex gap-2">
-								<Input
-									id="destination"
-									bind:value={editDestination}
-									class="flex-1"
-									required
-									disabled={!canManage}
-								/>
-								{#if canManage}
-									<Button type="submit" disabled={saving}>
-										<Save class="size-4" /> {saving ? 'Saving…' : 'Save'}
-									</Button>
-								{/if}
-							</div>
-						</div>
-						<div class="space-y-2">
-							<Label for="remark">Remark (optional)</Label>
-							<Input
-								id="remark"
-								bind:value={editRemark}
-								placeholder="What this Link is for"
-								disabled={!canManage}
-							/>
-						</div>
-						<div class="flex items-start gap-2">
-							<Checkbox
-								id="forward-utm"
-								bind:checked={editForwardUTM}
-								disabled={!canManage}
-								class="mt-0.5"
-							/>
-							<Label
-								for="forward-utm"
-								class="font-normal leading-snug text-muted-foreground"
-							>
-								Forward UTM parameters from the short URL to the Destination
-							</Label>
-						</div>
-						{#if saved}
-							<p class="text-sm text-green-600">Link saved.</p>
-						{/if}
-					</form>
-				</CardContent>
-			</Card>
-
-			{#if canManage}
-				<Card class="max-w-2xl border-destructive/30">
-					<CardHeader>
-						<CardTitle>Danger zone</CardTitle>
-						<CardDescription>
-							{link.disabled
-								? 'This Link currently returns 404 from the redirector. Enable restores redirects.'
-								: 'This Link redirects visitors to its Destination. Disable or delete to stop it.'}
-						</CardDescription>
-					</CardHeader>
-					<CardContent class="flex flex-wrap gap-2">
-						<Button variant={link.disabled ? 'default' : 'secondary'} onclick={toggleDisabled}>
-							{#if link.disabled}
-								<Power class="size-4" /> Enable
-							{:else}
-								<PowerOff class="size-4" /> Disable
-							{/if}
-						</Button>
-						<Button variant="destructive" onclick={remove}>
-							<Trash2 class="size-4" /> Delete
-						</Button>
-					</CardContent>
-				</Card>
-			{/if}
-		</div>
-	</div>
-
 	<BreakdownDialog
 		open={dialogOpen}
 		config={dialogConfig}
 		showVisitors={false}
 		onclose={() => (dialogOpen = false)}
 	/>
+
+	<ConfirmDialog request={confirmRequest} onclose={() => (confirmRequest = null)} />
 {/if}

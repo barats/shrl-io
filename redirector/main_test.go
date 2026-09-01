@@ -22,10 +22,10 @@ func testHandler(t *testing.T, cfg config) (http.Handler, *redis.Client) {
 	return newHandler(rdb, cfg), rdb
 }
 
-func seedLink(t *testing.T, rdb *redis.Client, hostname, code, destination string) {
+func seedLink(t *testing.T, rdb *redis.Client, code, destination string) {
 	t.Helper()
 	if err := cache.NewLinkCache(rdb).Put(context.Background(), &domain.Link{
-		Hostname:    hostname,
+		BaseURL:     "https://shrl.io",
 		Code:        code,
 		Destination: destination,
 	}); err != nil {
@@ -49,7 +49,7 @@ func getPath(t *testing.T, h http.Handler, host, path, ip string) *httptest.Resp
 
 func TestRedirectWithinLimits(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 0, linkLimit: 0})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/dest")
+	seedLink(t, rdb, "abc", "https://example.com/dest")
 
 	rr := get(t, h, "localhost", "abc", "192.0.2.1")
 	if rr.Code != http.StatusFound {
@@ -62,8 +62,8 @@ func TestRedirectWithinLimits(t *testing.T) {
 
 func TestRateLimitByIP(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 3, linkLimit: 0})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/a")
-	seedLink(t, rdb, "localhost", "def", "https://example.com/b")
+	seedLink(t, rdb, "abc", "https://example.com/a")
+	seedLink(t, rdb, "def", "https://example.com/b")
 
 	for i := 0; i < 3; i++ {
 		if rr := get(t, h, "localhost", "abc", "192.0.2.1"); rr.Code != http.StatusFound {
@@ -85,8 +85,8 @@ func TestRateLimitByIP(t *testing.T) {
 
 func TestRateLimitByLink(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 0, linkLimit: 3})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/a")
-	seedLink(t, rdb, "localhost", "def", "https://example.com/b")
+	seedLink(t, rdb, "abc", "https://example.com/a")
+	seedLink(t, rdb, "def", "https://example.com/b")
 
 	for i := 0; i < 3; i++ {
 		if rr := get(t, h, "localhost", "abc", "192.0.2.1"); rr.Code != http.StatusFound {
@@ -105,7 +105,7 @@ func TestRateLimitByLink(t *testing.T) {
 
 func TestUnknownCodeNotFound(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 0, linkLimit: 0})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/a")
+	seedLink(t, rdb, "abc", "https://example.com/a")
 
 	if rr := get(t, h, "localhost", "nope", "192.0.2.1"); rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown code: status = %d, want 404", rr.Code)
@@ -114,7 +114,7 @@ func TestUnknownCodeNotFound(t *testing.T) {
 
 func TestRedirectHasNoXRobotsTag(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 0, linkLimit: 0})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/dest")
+	seedLink(t, rdb, "abc", "https://example.com/dest")
 
 	rr := get(t, h, "localhost", "abc", "192.0.2.1")
 	if rr.Code != http.StatusFound {
@@ -166,7 +166,7 @@ func TestNotFoundPage(t *testing.T) {
 
 func TestTrailingSlashRedirectsToCanonical(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 0, linkLimit: 0})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/dest")
+	seedLink(t, rdb, "abc", "https://example.com/dest")
 
 	rr := getPath(t, h, "localhost", "/abc/?utm_source=news&utm_medium=email", "192.0.2.1")
 	if rr.Code != http.StatusMovedPermanently {
@@ -201,7 +201,7 @@ func TestRootAndMultiSegmentGetBranded404(t *testing.T) {
 
 func TestTrailingSlashSharesRateLimitBucket(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 0, linkLimit: 2})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/a")
+	seedLink(t, rdb, "abc", "https://example.com/a")
 
 	for i := 0; i < 2; i++ {
 		if rr := get(t, h, "localhost", "abc", "192.0.2.1"); rr.Code != http.StatusFound {
@@ -241,7 +241,7 @@ func TestFaviconSVG(t *testing.T) {
 
 func TestRateLimitPage(t *testing.T) {
 	h, rdb := testHandler(t, config{ipLimit: 1, linkLimit: 0})
-	seedLink(t, rdb, "localhost", "abc", "https://example.com/a")
+	seedLink(t, rdb, "abc", "https://example.com/a")
 
 	if rr := get(t, h, "localhost", "abc", "192.0.2.1"); rr.Code != http.StatusFound {
 		t.Fatalf("first request: status = %d, want 302", rr.Code)

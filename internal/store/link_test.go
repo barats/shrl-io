@@ -19,7 +19,7 @@ func TestLinkStoreCreateGet(t *testing.T) {
 	ctx := context.Background()
 
 	l := &domain.Link{
-		Hostname: "localhost", Code: "abc123", Destination: "https://example.com",
+		BaseURL: "http://localhost:8080", Code: "abc123", Destination: "https://example.com",
 		Remark: "promo", CreatedBy: 7,
 	}
 	if err := s.Create(ctx, l); err != nil {
@@ -29,7 +29,7 @@ func TestLinkStoreCreateGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.Hostname != "localhost" || got.Destination != "https://example.com" || got.Remark != "promo" || got.CreatedBy != 7 {
+	if got.BaseURL != "http://localhost:8080" || got.Destination != "https://example.com" || got.Remark != "promo" || got.CreatedBy != 7 {
 		t.Fatalf("unexpected link: %+v", got)
 	}
 }
@@ -47,12 +47,12 @@ func TestLinkStoreDuplicateKey(t *testing.T) {
 	db := newTestDB(t)
 	s := NewLinkStore(db)
 	ctx := context.Background()
-	// Codes are globally unique: the same Code on a different Hostname still
+	// Codes are globally unique: the same Code on a different Base URL still
 	// collides.
-	if err := s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "abc123", Destination: "https://a.example"}); err != nil {
+	if err := s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "abc123", Destination: "https://a.example"}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	err := s.Create(ctx, &domain.Link{Hostname: "other.com", Code: "abc123", Destination: "https://b.example"})
+	err := s.Create(ctx, &domain.Link{BaseURL: "https://other.com", Code: "abc123", Destination: "https://b.example"})
 	if !errors.Is(err, ErrDuplicatedKey) {
 		t.Fatalf("err = %v, want ErrDuplicatedKey", err)
 	}
@@ -65,7 +65,7 @@ func TestLinkStoreListNewestFirst(t *testing.T) {
 	base := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	for i, code := range []string{"aaa", "bbb", "ccc"} {
 		l := &domain.Link{
-			Hostname: "localhost", Code: code, Destination: "https://x.example",
+			BaseURL: "http://localhost:8080", Code: code, Destination: "https://x.example",
 			CreatedBy: 1, CreatedAt: base.Add(time.Duration(i) * time.Hour),
 		}
 		if err := s.Create(ctx, l); err != nil {
@@ -84,14 +84,14 @@ func TestLinkStoreListNewestFirst(t *testing.T) {
 	}
 }
 
-func TestLinkStoreListScopedByCreatorAcrossHostnames(t *testing.T) {
+func TestLinkStoreListScopedByCreatorAcrossBaseURLs(t *testing.T) {
 	db := newTestDB(t)
 	s := NewLinkStore(db)
 	ctx := context.Background()
 	links := []*domain.Link{
-		{Hostname: "localhost", Code: "one", Destination: "https://a.example", CreatedBy: 1},
-		{Hostname: "localhost", Code: "two", Destination: "https://b.example", CreatedBy: 2},
-		{Hostname: "other.com", Code: "three", Destination: "https://c.example", CreatedBy: 1},
+		{BaseURL: "http://localhost:8080", Code: "one", Destination: "https://a.example", CreatedBy: 1},
+		{BaseURL: "http://localhost:8080", Code: "two", Destination: "https://b.example", CreatedBy: 2},
+		{BaseURL: "https://other.com", Code: "three", Destination: "https://c.example", CreatedBy: 1},
 	}
 	for _, l := range links {
 		if err := s.Create(ctx, l); err != nil {
@@ -103,7 +103,7 @@ func TestLinkStoreListScopedByCreatorAcrossHostnames(t *testing.T) {
 		t.Fatalf("list: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("list = %+v, want creator 1's two links across hostnames", got)
+		t.Fatalf("list = %+v, want creator 1's two links across base URLs", got)
 	}
 	for _, l := range got {
 		if l.CreatedBy != 1 {
@@ -116,7 +116,7 @@ func TestLinkStoreSavePersistsRemark(t *testing.T) {
 	db := newTestDB(t)
 	s := NewLinkStore(db)
 	ctx := context.Background()
-	l := &domain.Link{Hostname: "localhost", Code: "abc123", Destination: "https://a.example", Remark: "first"}
+	l := &domain.Link{BaseURL: "http://localhost:8080", Code: "abc123", Destination: "https://a.example", Remark: "first"}
 	if err := s.Create(ctx, l); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -138,8 +138,8 @@ func TestLinkStoreListActiveExcludesDisabled(t *testing.T) {
 	db := newTestDB(t)
 	s := NewLinkStore(db)
 	ctx := context.Background()
-	_ = s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "one", Destination: "https://a.example"})
-	_ = s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "two", Destination: "https://b.example", Disabled: true})
+	_ = s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "one", Destination: "https://a.example"})
+	_ = s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "two", Destination: "https://b.example", Disabled: true})
 	active, err := s.ListActive(ctx)
 	if err != nil {
 		t.Fatalf("list active: %v", err)
@@ -153,7 +153,7 @@ func TestLinkStoreDelete(t *testing.T) {
 	db := newTestDB(t)
 	s := NewLinkStore(db)
 	ctx := context.Background()
-	_ = s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "abc123", Destination: "https://a.example"})
+	_ = s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "abc123", Destination: "https://a.example"})
 	if err := s.Delete(ctx, "abc123"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestLinkStoreMigrateIdempotentOnFreshTable(t *testing.T) {
 		t.Fatalf("first migrate: %v", err)
 	}
 	// A second migrate (e.g. every boot) must not drop data.
-	if err := s.Create(ctx, &domain.Link{Hostname: "localhost", Code: "abc123", Destination: "https://a.example"}); err != nil {
+	if err := s.Create(ctx, &domain.Link{BaseURL: "http://localhost:8080", Code: "abc123", Destination: "https://a.example"}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if err := s.Migrate(ctx); err != nil {

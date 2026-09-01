@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import InlineNav from '$lib/components/InlineNav.svelte';
 	import MobileNav from '$lib/components/MobileNav.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import UserMenu from '$lib/components/UserMenu.svelte';
 
 	let { children, data } = $props();
@@ -24,7 +25,7 @@
 </script>
 
 <svelte:head>
-	<title>{team?.name ?? 'Team'} — shrl.io</title>
+	<title>{team?.name ?? 'Team'} - shrl.io</title>
 </svelte:head>
 
 {#if team}
@@ -38,11 +39,14 @@
 				<span class="max-w-40 truncate font-medium text-foreground">{team.name}</span>
 				<InlineNav items={nav} />
 			</div>
-			<UserMenu
-				username={data.user?.username ?? ''}
-				teams={data.teams ?? []}
-				currentTeamId={teamId}
-			/>
+			<div class="flex items-center gap-1">
+				<ThemeToggle />
+				<UserMenu
+					username={data.user?.username ?? ''}
+					teams={data.teams ?? []}
+					currentTeamId={teamId}
+				/>
+			</div>
 		</div>
 	</header>
 {/if}

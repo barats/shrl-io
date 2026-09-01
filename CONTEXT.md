@@ -25,18 +25,21 @@ A single per-instance setting an `Admin` changes in Settings, defaulting to 6
 and validated to 4-12; existing `Code`s keep serving when it changes.
 _Avoid_: code size, length limit
 
-**Hostname**:
-A domain an `Admin` registers in the Hostname Registry, selected by a `User`
-when creating a `Link`, under which the `Link`'s short URL is served. A
-non-identifying attribute of a `Link`: it labels where the Link lives and is
-shown when displaying Links, but is never needed to identify or query a Link.
-Every `User` may create `Link`s under any registered `Hostname`.
-_Avoid_: domain, brand
+**Base URL**:
+The public URL prefix (scheme, host, optional port and path) under which a
+`Link`'s short URL is served, e.g. `https://example.com` or
+`http://localhost:8080`. An `Admin` registers `Base URL`s in the Base URL
+Registry; a `User` selects one when creating a `Link`. Display and QR codes
+render `{base_url}/{code}`. A non-identifying attribute of a `Link`: it
+labels where the Link lives and is shown when displaying Links, but is never
+needed to identify or query a Link. Every `User` may create `Link`s under any
+registered `Base URL`.
+_Avoid_: hostname, domain, brand
 
-**Hostname Registry**:
-The set of `Hostname`s an `Admin` has registered; the universe a `User` may
+**Base URL Registry**:
+The set of `Base URL`s an `Admin` has registered; the universe a `User` may
 select from when creating a `Link`.
-_Avoid_: hostname list, allowed domains
+_Avoid_: hostname list, allowed domains, domain registry
 
 **Destination**:
 The URL a `Link` redirects to.

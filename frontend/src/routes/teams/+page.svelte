@@ -72,7 +72,7 @@
 </script>
 
 <svelte:head>
-	<title>Teams — shrl.io</title>
+	<title>Teams - shrl.io</title>
 </svelte:head>
 
 <h1 class="text-2xl font-semibold tracking-tight">Teams</h1>

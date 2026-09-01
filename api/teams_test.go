@@ -36,7 +36,7 @@ func testDB(t *testing.T) *gorm.DB {
 	ctx := context.Background()
 	for _, migrate := range []func(context.Context) error{
 		store.NewLinkStore(db).Migrate,
-		store.NewHostnameStore(db).Migrate,
+		store.NewBaseURLStore(db).Migrate,
 		store.NewUserStore(db).Migrate,
 		store.NewTeamStore(db).Migrate,
 		store.NewInviteStore(db).Migrate,
@@ -51,15 +51,15 @@ func testDB(t *testing.T) *gorm.DB {
 }
 
 // newTestServer builds a full server over sqlite + miniredis. The default
-// hostname is registered so link creation works out of the box.
+// base URL is registered so link creation works out of the box.
 func newTestServer(t *testing.T) *server {
 	t.Helper()
 	db := testDB(t)
 	rdb := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: rdb.Addr()})
-	hs := store.NewHostnameStore(db)
-	if err := hs.Create(context.Background(), &domain.Hostname{Name: "localhost"}); err != nil {
-		t.Fatalf("register hostname: %v", err)
+	bs := store.NewBaseURLStore(db)
+	if err := bs.Create(context.Background(), &domain.BaseURL{BaseURL: "http://localhost:8080"}); err != nil {
+		t.Fatalf("register base URL: %v", err)
 	}
 	links := store.NewLinkStore(db)
 	analytics := store.NewAnalyticsStore(db)
@@ -70,13 +70,13 @@ func newTestServer(t *testing.T) *server {
 		links:     links,
 		analytics: analytics,
 		users:     store.NewUserStore(db),
-		hostnames: hs,
+		baseURLs:  bs,
 		teams:     teams,
 		invites:   store.NewInviteStore(db),
 		settings:  settings,
 		linkCache: linkCache,
-		linkSvc:   service.NewLinkService(links, analytics, hs, teams, settings, linkCache, "localhost", 30),
-		cfg:       config{defaultHostname: "localhost", retentionDays: 30, tokenTTL: time.Hour, internalSecret: "test-secret"},
+		linkSvc:   service.NewLinkService(links, analytics, bs, teams, settings, linkCache, "http://localhost:8080", 30),
+		cfg:       config{defaultBaseURL: "http://localhost:8080", retentionDays: 30, tokenTTL: time.Hour, internalSecret: "test-secret"},
 	}
 }
 
@@ -173,7 +173,7 @@ func TestTeamLifecycleAndAccess(t *testing.T) {
 	}
 
 	// carol creates a link in the team
-	rec = do(t, s, "POST", "/teams/1/links", carolTok, map[string]any{"hostname": "localhost", "destination": "https://example.com"})
+	rec = do(t, s, "POST", "/teams/1/links", carolTok, map[string]any{"base_url": "http://localhost:8080", "destination": "https://example.com"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("carol create team link = %d, body %s", rec.Code, rec.Body.String())
 	}

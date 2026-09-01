@@ -79,7 +79,7 @@ func newHandler(rdb *redis.Client, cfg config) http.Handler {
 			writeRateLimit(w, retry)
 			return
 		}
-		cl, ok, err := linkCache.Get(r.Context(), host, code)
+		cl, ok, err := linkCache.Get(r.Context(), code)
 		if err != nil {
 			log.Printf("cache lookup error: %v", err)
 			writeInternalError(w)

@@ -110,7 +110,7 @@
 </script>
 
 <svelte:head>
-	<title>Members — {team?.name ?? 'Team'} — shrl.io</title>
+	<title>Members - {team?.name ?? 'Team'} - shrl.io</title>
 </svelte:head>
 
 <h1 class="text-2xl font-semibold tracking-tight">Members</h1>

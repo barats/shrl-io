@@ -19,11 +19,11 @@ func testClient(t *testing.T) *redis.Client {
 func TestLinkCachePutGet(t *testing.T) {
 	c := NewLinkCache(testClient(t))
 	ctx := context.Background()
-	l := &domain.Link{Hostname: "shrl.io", Code: "abc", Destination: "https://example.com/path?a=1", ForwardUTM: true}
+	l := &domain.Link{BaseURL: "https://shrl.io", Code: "abc", Destination: "https://example.com/path?a=1", ForwardUTM: true}
 	if err := c.Put(ctx, l); err != nil {
 		t.Fatal(err)
 	}
-	got, ok, err := c.Get(ctx, "shrl.io", "abc")
+	got, ok, err := c.Get(ctx, "abc")
 	if err != nil || !ok {
 		t.Fatalf("Get: ok=%v err=%v", ok, err)
 	}
@@ -38,13 +38,13 @@ func TestLinkCachePutGet(t *testing.T) {
 func TestLinkCacheDisabledEvicts(t *testing.T) {
 	c := NewLinkCache(testClient(t))
 	ctx := context.Background()
-	if err := c.Put(ctx, &domain.Link{Hostname: "shrl.io", Code: "abc", Destination: "https://example.com"}); err != nil {
+	if err := c.Put(ctx, &domain.Link{BaseURL: "https://shrl.io", Code: "abc", Destination: "https://example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Put(ctx, &domain.Link{Hostname: "shrl.io", Code: "abc", Destination: "https://example.com", Disabled: true}); err != nil {
+	if err := c.Put(ctx, &domain.Link{BaseURL: "https://shrl.io", Code: "abc", Destination: "https://example.com", Disabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := c.Get(ctx, "shrl.io", "abc"); err != nil || ok {
+	if _, ok, err := c.Get(ctx, "abc"); err != nil || ok {
 		t.Fatalf("disabled link should be evicted: ok=%v err=%v", ok, err)
 	}
 }

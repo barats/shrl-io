@@ -36,28 +36,28 @@ func (e *ValidationError) Error() string { return e.Msg }
 type LinkService struct {
 	links           *store.LinkStore
 	analytics       *store.AnalyticsStore
-	hostnames       *store.HostnameStore
+	baseURLs        *store.BaseURLStore
 	teams           *store.TeamStore
 	settings        *store.SettingStore
 	linkCache       *cache.LinkCache
-	defaultHostname string
+	defaultBaseURL  string
 	retentionDays   int
 }
 
 func NewLinkService(
 	links *store.LinkStore,
 	analytics *store.AnalyticsStore,
-	hostnames *store.HostnameStore,
+	baseURLs *store.BaseURLStore,
 	teams *store.TeamStore,
 	settings *store.SettingStore,
 	linkCache *cache.LinkCache,
-	defaultHostname string,
+	defaultBaseURL string,
 	retentionDays int,
 ) *LinkService {
 	return &LinkService{
-		links: links, analytics: analytics, hostnames: hostnames,
+		links: links, analytics: analytics, baseURLs: baseURLs,
 		teams: teams, settings: settings, linkCache: linkCache,
-		defaultHostname: defaultHostname, retentionDays: retentionDays,
+		defaultBaseURL: defaultBaseURL, retentionDays: retentionDays,
 	}
 }
 
@@ -96,7 +96,7 @@ func (s *LinkService) CanManageLink(ctx context.Context, u *domain.User, l *doma
 
 // CreateLinkInput carries a validated-in-service create request.
 type CreateLinkInput struct {
-	Hostname    string
+	BaseURL     string
 	Destination string
 	Remark      string
 	ForwardUTM  bool
@@ -106,16 +106,16 @@ type CreateLinkInput struct {
 // scope, retrying code generation on collision and writing the redirect cache
 // on success.
 func (s *LinkService) CreateLink(ctx context.Context, teamID *int64, creatorID int64, in CreateLinkInput) (*domain.Link, error) {
-	hostname := in.Hostname
-	if hostname == "" {
-		hostname = s.defaultHostname
+	baseURL := in.BaseURL
+	if baseURL == "" {
+		baseURL = s.defaultBaseURL
 	}
-	hostname, err := domain.NormalizeAndValidateHostname(hostname)
+	baseURL, err := domain.NormalizeAndValidateBaseURL(baseURL)
 	if err != nil {
 		return nil, &ValidationError{Msg: err.Error()}
 	}
-	if _, err := s.hostnames.Get(ctx, hostname); err != nil {
-		return nil, &ValidationError{Msg: "hostname is not registered"}
+	if _, err := s.baseURLs.Get(ctx, baseURL); err != nil {
+		return nil, &ValidationError{Msg: "base URL is not registered"}
 	}
 	dest, err := domain.NormalizeAndValidateDestination(in.Destination)
 	if err != nil {
@@ -134,7 +134,7 @@ func (s *LinkService) CreateLink(ctx context.Context, teamID *int64, creatorID i
 		if err != nil {
 			return nil, err
 		}
-		l := &domain.Link{Hostname: hostname, Code: code, Destination: dest, Remark: remark, ForwardUTM: in.ForwardUTM, CreatedBy: creatorID, TeamID: teamID}
+		l := &domain.Link{BaseURL: baseURL, Code: code, Destination: dest, Remark: remark, ForwardUTM: in.ForwardUTM, CreatedBy: creatorID, TeamID: teamID}
 		if err := s.links.Create(ctx, l); err == nil {
 			if err := s.linkCache.Put(ctx, l); err != nil {
 				log.Printf("cache put: %v", err)
@@ -241,36 +241,35 @@ func (s *LinkService) SetDisabled(ctx context.Context, u *domain.User, code stri
 // DeleteLink permanently removes a link and evicts it from the redirect
 // cache. Internal API only; the Auth API never exposes deletion.
 func (s *LinkService) DeleteLink(ctx context.Context, u *domain.User, code string) error {
-	l, err := s.ManageableLink(ctx, u, code)
-	if err != nil {
+	if _, err := s.ManageableLink(ctx, u, code); err != nil {
 		return err
 	}
 	if err := s.links.Delete(ctx, code); err != nil {
 		return err
 	}
-	return s.linkCache.Delete(ctx, l.Hostname, code)
+	return s.linkCache.Delete(ctx, code)
 }
 
-// ListLinks returns the user's Personal links across every hostname, newest
+// ListLinks returns the user's Personal links across every base URL, newest
 // first.
 func (s *LinkService) ListLinks(ctx context.Context, userID int64) ([]domain.Link, error) {
 	return s.links.List(ctx, userID)
 }
 
-// ListTeamLinks returns a team's links across every hostname, newest first.
+// ListTeamLinks returns a team's links across every base URL, newest first.
 func (s *LinkService) ListTeamLinks(ctx context.Context, teamID int64) ([]domain.Link, error) {
 	return s.links.ListByTeam(ctx, teamID)
 }
 
-// ListHostnames returns the Hostname Registry for the create-link select.
-func (s *LinkService) ListHostnames(ctx context.Context) ([]string, error) {
-	hostnames, err := s.hostnames.List(ctx)
+// ListBaseURLs returns the Base URL Registry for the create-link select.
+func (s *LinkService) ListBaseURLs(ctx context.Context) ([]string, error) {
+	baseURLs, err := s.baseURLs.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(hostnames))
-	for _, h := range hostnames {
-		names = append(names, h.Name)
+	names := make([]string, 0, len(baseURLs))
+	for _, b := range baseURLs {
+		names = append(names, b.BaseURL)
 	}
 	return names, nil
 }

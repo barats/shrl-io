@@ -6,7 +6,7 @@ function randomSecret(): string {
 
 export const config = {
 	apiUrl: (env.SHRL_API_URL ?? 'http://localhost:8080').replace(/\/+$/, ''),
-	defaultHostname: env.SHRL_DEFAULT_HOSTNAME ?? 'localhost',
+	defaultBaseURL: env.SHRL_DEFAULT_BASE_URL ?? 'http://localhost:8080',
 	// The shared secret the Internal API demands on every request (ADR 0015).
 	// Both sides must agree; in production set SHRL_API_INTERNAL_SECRET on the
 	// api and the frontend to the same value.

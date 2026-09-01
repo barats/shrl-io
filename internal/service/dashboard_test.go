@@ -76,8 +76,8 @@ func TestGetDashboard(t *testing.T) {
 	if len(d.TopByVisitors) != 2 || d.TopByVisitors[0].Code != la.Code || d.TopByVisitors[0].UniqueVisitors != 6 {
 		t.Errorf("top by visitors = %+v, want a first with 6", d.TopByVisitors)
 	}
-	if d.TopByVisits[0].Hostname != "shrl.io" {
-		t.Errorf("top link hostname = %q, want shrl.io", d.TopByVisits[0].Hostname)
+	if d.TopByVisits[0].BaseURL != "https://shrl.io" {
+		t.Errorf("top link base URL = %q, want https://shrl.io", d.TopByVisits[0].BaseURL)
 	}
 
 	// environment browser breakdown ordered by unique visitors desc, summed
@@ -190,8 +190,8 @@ func TestGetTopLinks(t *testing.T) {
 	if len(byVisitors) != 2 || byVisitors[0].Code != la.Code || byVisitors[0].UniqueVisitors != 6 {
 		t.Errorf("by visitors = %+v, want a first with 6", byVisitors)
 	}
-	if byVisitors[0].Hostname != "shrl.io" {
-		t.Errorf("hostname = %q, want shrl.io", byVisitors[0].Hostname)
+	if byVisitors[0].BaseURL != "https://shrl.io" {
+		t.Errorf("base URL = %q, want https://shrl.io", byVisitors[0].BaseURL)
 	}
 }
 

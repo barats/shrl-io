@@ -42,31 +42,31 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export interface CreateLinkInput {
-	hostname?: string;
+	base_url?: string;
 	destination: string;
 	remark?: string;
 	forward_utm?: boolean;
 }
 
 export const api = {
-	async config(): Promise<{ defaultHostname: string }> {
-		return req<{ defaultHostname: string }>('config');
+	async config(): Promise<{ defaultBaseURL: string }> {
+		return req<{ defaultBaseURL: string }>('config');
 	},
 
-	async hostnames(): Promise<string[]> {
-		return req<string[]>('hostnames');
+	async baseURLs(): Promise<string[]> {
+		return req<string[]>('base-urls');
 	},
 
-	async createHostname(name: string): Promise<unknown> {
-		return req('hostnames', {
+	async createBaseURL(url: string): Promise<unknown> {
+		return req('base-urls', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ hostname: name })
+			body: JSON.stringify({ base_url: url })
 		});
 	},
 
-	async deleteHostname(name: string): Promise<void> {
-		return req(`hostnames/${encodeURIComponent(name)}`, { method: 'DELETE' });
+	async deleteBaseURL(url: string): Promise<void> {
+		return req(`base-urls?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
 	},
 
 	async listLinks(): Promise<Link[]> {

@@ -26,7 +26,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	ctx := context.Background()
 	for _, migrate := range []func(context.Context) error{
 		NewLinkStore(db).Migrate,
-		NewHostnameStore(db).Migrate,
+		NewBaseURLStore(db).Migrate,
 		NewUserStore(db).Migrate,
 		NewTeamStore(db).Migrate,
 		NewInviteStore(db).Migrate,

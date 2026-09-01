@@ -27,30 +27,30 @@ import (
 )
 
 type config struct {
-	addr            string
-	databaseURL     string
-	redisAddr       string
-	defaultHostname string
-	retentionDays   int
-	ipLimit         int
-	keyReadLimit    int
-	keyWriteLimit   int
-	failLimit       int
-	rateWindow      time.Duration
+	addr           string
+	databaseURL    string
+	redisAddr      string
+	defaultBaseURL string
+	retentionDays  int
+	ipLimit        int
+	keyReadLimit   int
+	keyWriteLimit  int
+	failLimit      int
+	rateWindow     time.Duration
 }
 
 func loadConfig() config {
 	return config{
-		addr:            env.Or("SHRL_AUTH_ADDR", ":8080"),
-		databaseURL:     env.Or("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
-		redisAddr:       env.Or("SHRL_REDIS_ADDR", "localhost:6379"),
-		defaultHostname: env.Or("SHRL_DEFAULT_HOSTNAME", "localhost"),
-		retentionDays:   env.Int("SHRL_RETENTION_DAYS", 365),
-		ipLimit:         env.Int("SHRL_AUTH_RATE_LIMIT_IP", 60),
-		keyReadLimit:    env.Int("SHRL_AUTH_RATE_LIMIT_KEY_READ", 300),
-		keyWriteLimit:   env.Int("SHRL_AUTH_RATE_LIMIT_KEY_WRITE", 30),
-		failLimit:       env.Int("SHRL_AUTH_RATE_LIMIT_FAIL", 10),
-		rateWindow:      time.Minute,
+		addr:           env.Or("SHRL_AUTH_ADDR", ":8080"),
+		databaseURL:    env.Or("SHRL_DATABASE_URL", "postgres://shrl:shrl@localhost:5432/shrl"),
+		redisAddr:      env.Or("SHRL_REDIS_ADDR", "localhost:6379"),
+		defaultBaseURL: env.Or("SHRL_DEFAULT_BASE_URL", "http://localhost:8080"),
+		retentionDays:  env.Int("SHRL_RETENTION_DAYS", 365),
+		ipLimit:        env.Int("SHRL_AUTH_RATE_LIMIT_IP", 60),
+		keyReadLimit:   env.Int("SHRL_AUTH_RATE_LIMIT_KEY_READ", 300),
+		keyWriteLimit:  env.Int("SHRL_AUTH_RATE_LIMIT_KEY_WRITE", 30),
+		failLimit:      env.Int("SHRL_AUTH_RATE_LIMIT_FAIL", 10),
+		rateWindow:     time.Minute,
 	}
 }
 
@@ -79,15 +79,15 @@ func main() {
 	links := store.NewLinkStore(db)
 	analytics := store.NewAnalyticsStore(db)
 	users := store.NewUserStore(db)
-	hostnames := store.NewHostnameStore(db)
+	baseURLs := store.NewBaseURLStore(db)
 	teams := store.NewTeamStore(db)
 	settings := store.NewSettingStore(db)
 	// Migrations are idempotent; running them here means auth can start
-	// alongside the api without depending on its start order. Admin, hostname,
+	// alongside the api without depending on its start order. Admin, base URL,
 	// and setting bootstrap stays the api's job.
 	for _, migrate := range []func(context.Context) error{
 		links.Migrate, analytics.Migrate, users.Migrate,
-		hostnames.Migrate, teams.Migrate, settings.Migrate,
+		baseURLs.Migrate, teams.Migrate, settings.Migrate,
 	} {
 		if err := migrate(ctx); err != nil {
 			log.Fatalf("migrate: %v", err)
@@ -96,7 +96,7 @@ func main() {
 
 	rdb := redisutil.Connect(ctx, redisutil.ConfigFromEnv(cfg.redisAddr, 0, 2))
 	linkCache := cache.NewLinkCache(rdb)
-	svc := service.NewLinkService(links, analytics, hostnames, teams, settings, linkCache, cfg.defaultHostname, cfg.retentionDays)
+	svc := service.NewLinkService(links, analytics, baseURLs, teams, settings, linkCache, cfg.defaultBaseURL, cfg.retentionDays)
 	s := &server{users: users, teams: teams, svc: svc, rl: ratelimit.New(rdb), cfg: cfg}
 
 	mux := s.routes()
@@ -106,7 +106,7 @@ func main() {
 
 func (s *server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/hostnames", s.listHostnames)
+	mux.HandleFunc("GET /v1/base-urls", s.listBaseURLs)
 	mux.HandleFunc("GET /v1/teams", s.listTeams)
 	mux.HandleFunc("GET /v1/teams/{id}", s.getTeam)
 	mux.HandleFunc("GET /v1/teams/{id}/links", s.listTeamLinks)
@@ -216,7 +216,7 @@ func (s *server) writeServiceError(w http.ResponseWriter, err error) {
 
 func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamID *int64) {
 	var req struct {
-		Hostname    string `json:"hostname"`
+		BaseURL     string `json:"base_url"`
 		Destination string `json:"destination"`
 		Remark      string `json:"remark"`
 		ForwardUTM  bool   `json:"forward_utm"`
@@ -226,7 +226,7 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		return
 	}
 	l, err := s.svc.CreateLink(r.Context(), teamID, currentUser(r).ID, service.CreateLinkInput{
-		Hostname:    req.Hostname,
+		BaseURL:     req.BaseURL,
 		Destination: req.Destination,
 		Remark:      req.Remark,
 		ForwardUTM:  req.ForwardUTM,
@@ -382,10 +382,10 @@ func (s *server) createTeamLink(w http.ResponseWriter, r *http.Request) {
 	s.createLinkInScope(w, r, &id)
 }
 
-func (s *server) listHostnames(w http.ResponseWriter, r *http.Request) {
-	names, err := s.svc.ListHostnames(r.Context())
+func (s *server) listBaseURLs(w http.ResponseWriter, r *http.Request) {
+	names, err := s.svc.ListBaseURLs(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list hostnames")
+		writeError(w, http.StatusInternalServerError, "failed to list base URLs")
 		return
 	}
 	writeJSON(w, http.StatusOK, names)

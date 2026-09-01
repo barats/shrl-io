@@ -22,19 +22,19 @@
 
 	let {
 		open = $bindable(false),
-		hostnames,
-		defaultHostname,
+		baseURLs,
+		defaultBaseURL,
 		teamId = undefined,
 		onCreated
 	}: {
 		open: boolean;
-		hostnames: string[];
-		defaultHostname: string;
+		baseURLs: string[];
+		defaultBaseURL: string;
 		teamId?: number;
 		onCreated?: () => void;
 	} = $props();
 
-	let createHostname = $state('');
+	let createBaseURL = $state('');
 	let createDestination = $state('');
 	let createRemark = $state('');
 	let createForwardUTM = $state(false);
@@ -43,7 +43,7 @@
 
 	$effect(() => {
 		if (!open) return;
-		createHostname = defaultHostname;
+		createBaseURL = defaultBaseURL;
 		createDestination = '';
 		createRemark = '';
 		createForwardUTM = false;
@@ -64,7 +64,7 @@
 		error = '';
 		try {
 			const input = {
-				hostname: createHostname,
+				base_url: createBaseURL,
 				destination: createDestination,
 				remark: createRemark || undefined,
 				forward_utm: createForwardUTM
@@ -103,8 +103,8 @@
 				<CardTitle>Create a Link</CardTitle>
 				<CardDescription>
 					{teamId !== undefined
-						? 'Shorten a Destination under a registered Hostname. The Team owns the Link.'
-						: "Shorten a Destination under this instance's hostnames."}
+						? 'Shorten a Destination under a registered Base URL. The Team owns the Link.'
+						: "Shorten a Destination under this instance's registered Base URLs."}
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
@@ -122,14 +122,14 @@
 					class="space-y-4"
 				>
 					<div class="space-y-2">
-						<Label for="dlg-hostname">Hostname</Label>
-						<Select type="single" bind:value={createHostname}>
-							<SelectTrigger id="dlg-hostname" class="w-full">
-								<span data-slot="select-value">{createHostname || 'Hostname'}</span>
+						<Label for="dlg-base-url">Base URL</Label>
+						<Select type="single" bind:value={createBaseURL}>
+							<SelectTrigger id="dlg-base-url" class="w-full">
+								<span data-slot="select-value">{createBaseURL || 'Base URL'}</span>
 							</SelectTrigger>
 							<SelectContent>
-								{#each hostnames as host (host)}
-									<SelectItem value={host} label={host} />
+								{#each baseURLs as url (url)}
+									<SelectItem value={url} label={url} />
 								{/each}
 							</SelectContent>
 						</Select>

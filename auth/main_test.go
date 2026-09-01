@@ -35,7 +35,7 @@ func newTestServer(t *testing.T) *server {
 	ctx := context.Background()
 	for _, migrate := range []func(context.Context) error{
 		store.NewLinkStore(db).Migrate,
-		store.NewHostnameStore(db).Migrate,
+		store.NewBaseURLStore(db).Migrate,
 		store.NewUserStore(db).Migrate,
 		store.NewTeamStore(db).Migrate,
 		store.NewAnalyticsStore(db).Migrate,
@@ -45,9 +45,9 @@ func newTestServer(t *testing.T) *server {
 			t.Fatalf("migrate: %v", err)
 		}
 	}
-	hs := store.NewHostnameStore(db)
-	if err := hs.Create(ctx, &domain.Hostname{Name: "localhost"}); err != nil {
-		t.Fatalf("register hostname: %v", err)
+	bs := store.NewBaseURLStore(db)
+	if err := bs.Create(ctx, &domain.BaseURL{BaseURL: "http://localhost:8080"}); err != nil {
+		t.Fatalf("register base URL: %v", err)
 	}
 	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	links := store.NewLinkStore(db)
@@ -56,20 +56,20 @@ func newTestServer(t *testing.T) *server {
 	teams := store.NewTeamStore(db)
 	settings := store.NewSettingStore(db)
 	linkCache := cache.NewLinkCache(client)
-	svc := service.NewLinkService(links, analytics, hs, teams, settings, linkCache, "localhost", 30)
+	svc := service.NewLinkService(links, analytics, bs, teams, settings, linkCache, "http://localhost:8080", 30)
 	return &server{
 		users: users,
 		teams: teams,
 		svc:   svc,
 		rl:    ratelimit.New(client),
 		cfg: config{
-			defaultHostname: "localhost",
-			retentionDays:   30,
-			ipLimit:         60,
-			keyReadLimit:    300,
-			keyWriteLimit:   30,
-			failLimit:       10,
-			rateWindow:      time.Minute,
+			defaultBaseURL: "http://localhost:8080",
+			retentionDays:  30,
+			ipLimit:        60,
+			keyReadLimit:   300,
+			keyWriteLimit:  30,
+			failLimit:      10,
+			rateWindow:     time.Minute,
 		},
 	}
 }
@@ -166,8 +166,8 @@ func TestCreateAndManageLink(t *testing.T) {
 	if rec := do(t, s, "GET", "/v1/links/"+l.Code+"/analytics", key, nil); rec.Code != http.StatusOK {
 		t.Fatalf("analytics = %d", rec.Code)
 	}
-	if rec := do(t, s, "GET", "/v1/hostnames", key, nil); rec.Code != http.StatusOK {
-		t.Fatalf("hostnames = %d", rec.Code)
+	if rec := do(t, s, "GET", "/v1/base-urls", key, nil); rec.Code != http.StatusOK {
+		t.Fatalf("base URLs = %d", rec.Code)
 	}
 	if rec := do(t, s, "GET", "/v1/teams", key, nil); rec.Code != http.StatusOK {
 		t.Fatalf("teams = %d", rec.Code)

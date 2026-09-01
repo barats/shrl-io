@@ -19,7 +19,7 @@
 ## Overview
 
 **shrl.io** is a self-hosted URL shortener and traffic analyzer. It turns a
-**Destination** URL into a short, shareable URL under your own **Hostname** and
+**Destination** URL into a short, shareable URL under your own **Base URL** and
 redirects visitors there at sub-millisecond speed, while recording
 privacy-first traffic analytics. It is built as a small set of Go
 microservices — an internal API, a public auth service, a Redis-backed
@@ -53,11 +53,11 @@ teams and individuals who want full control over their link data.
 
 - **Auto codes**: shrl.io generates every **Code**: lowercase, from an
   unambiguous alphabet (no `0`/`O`/`1`/`l`). Users never choose a Code. A Code
-  is globally unique across every Hostname. The exact **Code Length** defaults
+  is globally unique across every Base URL. The exact **Code Length** defaults
   to 6; an Admin can set it per instance (4–12) in Settings.
-- **Admin-managed hostnames**: an **Admin** registers **Hostnames**; Users
-  select from the registry when creating a Link. A Hostname labels where a Link
-  lives and is shown alongside the Code (`hostname/code`) when displaying
+- **Admin-managed base URLs**: an **Admin** registers **Base URLs**; Users
+  select from the registry when creating a Link. A Base URL labels where a Link
+  lives and is shown alongside the Code (`base_url/code`) when displaying
   Links, but it is not part of a Link's identity — a Code alone identifies it.
 - **Remark**: an optional note on a Link so you can remember what it does;
   editable after creation.
@@ -105,7 +105,7 @@ teams and individuals who want full control over their link data.
   generated temporary one (shown once); the User must change it on their next
   sign-in before using the instance. There is no SMTP-based reset.
 - **Link management**: each User sees and manages their own Links, across every
-  Hostname: create, edit the Destination, disable/enable, and delete.
+  Base URL: create, edit the Destination, disable/enable, and delete.
 - **Analytics view**: lifetime and window totals, a daily visits chart, and
   top-N breakdowns with a dimension picker.
 
@@ -119,12 +119,12 @@ teams and individuals who want full control over their link data.
   **Invite Codes** and share them out of band; a User joins a Team by entering
   the code. Only an Admin adds members directly (by username).
 - **Team dashboard**: each Team page lists members, invite codes (for owners),
-  and the Team's Links (labeled `hostname/code`); Team Links have their own detail
+  and the Team's Links (labeled `base_url/code`); Team Links have their own detail
   page with analytics.
 
 ### Settings (admin)
 
-- **Hostnames**: register and remove Hostnames in the Registry.
+- **Base URLs**: register and remove Base URLs in the Registry.
 - **Accounts**: create and delete Users; deleting a User removes their
   Personal Links and memberships — Team Links they created stay with the Team.
 - **Teams**: create and delete Teams; deleting a Team reverts its Links to
@@ -240,7 +240,7 @@ on the Account page of the UI (it is shown once), then:
     curl -X POST http://localhost:8083/v1/links \
       -H "Authorization: Bearer <your-api-key>" \
       -H "Content-Type: application/json" \
-      -d '{"hostname":"localhost","destination":"https://example.com"}'
+      -d '{"base_url":"http://localhost:8080","destination":"https://example.com"}'
 
 Then visit `http://localhost:8080/{code}` — you get a 302 to the destination.
 The redirector rate-limits per IP (default 600 req/min) and per Link (default
@@ -248,9 +248,9 @@ The redirector rate-limits per IP (default 600 req/min) and per Link (default
 
 The Auth API is rate-limited per IP (default 60 req/min) and per key (300
 req/min reads, 30 req/min writes); excess requests get `429` with a
-`Retry-After` header. Link `hostname` must be a registered Hostname
-(admin-managed); it defaults to `SHRL_DEFAULT_HOSTNAME` (`localhost`,
-auto-registered on first run), or pass a `hostname` field to target another.
+`Retry-After` header. Link `base_url` must be a registered Base URL
+(admin-managed); it defaults to `SHRL_DEFAULT_BASE_URL` (`http://localhost:8080`,
+auto-registered on first run), or pass a `base_url` field to target another.
 
 ### Analytics (the worker aggregates visits from the Redis stream)
 
@@ -335,7 +335,7 @@ every request on the signed-in user's behalf and presents the session token
 | `SHRL_ADMIN_PASSWORD`     | *(random, shown once)*                               | First-run Admin password (bcrypt-hashed)      |
 | `SHRL_TOKEN_TTL`          | `86400`                                              | Bearer token lifetime in seconds              |
 | `SHRL_CODE_LENGTH`        | `6`                                                  | Seed for the per-instance Code Length setting (4–12) |
-| `SHRL_DEFAULT_HOSTNAME`   | `localhost`                                          | Hostname auto-registered on first run and pre-selected when creating a Link |
+| `SHRL_DEFAULT_BASE_URL`   | `http://localhost:8080`                            | Base URL auto-registered on first run and pre-selected when creating a Link |
 | `SHRL_DATABASE_URL`       | `postgres://shrl:shrl@localhost:5432/shrl`           | PostgreSQL connection string                  |
 | `SHRL_DB_MAX_OPEN_CONNS`  | `20`                                                 | Max open Postgres connections                 |
 | `SHRL_DB_MAX_IDLE_CONNS`  | `5`                                                  | Max idle Postgres connections                 |
@@ -358,7 +358,7 @@ request and rate-limited per IP and per key (ADR 0016, ADR 0017).
 | `SHRL_AUTH_RATE_LIMIT_KEY_READ` | `300`                                                | Per-key reads per minute                     |
 | `SHRL_AUTH_RATE_LIMIT_KEY_WRITE`| `30`                                                 | Per-key writes per minute                    |
 | `SHRL_AUTH_RATE_LIMIT_FAIL`     | `10`                                                 | Failed key validations per minute per IP     |
-| `SHRL_DEFAULT_HOSTNAME`         | `localhost`                                          | Hostname pre-selected when creating a Link   |
+| `SHRL_DEFAULT_BASE_URL`         | `http://localhost:8080`                              | Base URL pre-selected when creating a Link   |
 | `SHRL_DATABASE_URL`             | `postgres://shrl:shrl@localhost:5432/shrl`           | PostgreSQL connection string                 |
 | `SHRL_DB_MAX_OPEN_CONNS`        | `20`                                                 | Max open Postgres connections                |
 | `SHRL_DB_MAX_IDLE_CONNS`        | `5`                                                  | Max idle Postgres connections                |
@@ -378,7 +378,7 @@ proxies every API call to the Internal API (ADR 0005).
 |---------------------------|--------------------------|------------------------------------------------------------|
 | `SHRL_API_URL`            | `http://localhost:8080`  | Internal API address the UI proxies to                     |
 | `SHRL_API_INTERNAL_SECRET` | `dev-internal-secret`   | Shared secret the Internal API demands on every request (set to the same value on the api) |
-| `SHRL_DEFAULT_HOSTNAME`   | `localhost`              | Hostname pre-selected when creating a Link                 |
+| `SHRL_DEFAULT_BASE_URL`   | `http://localhost:8080`              | Base URL pre-selected when creating a Link                 |
 | `SHRL_SESSION_SECRET`     | *(random per boot)*      | HMAC secret for signing UI session cookies                 |
 | `SHRL_SESSION_TTL`        | `86400`                  | UI session cookie lifetime in seconds                      |
 | `SHRL_COOKIE_SECURE`      | `false`                  | Set `true` to send the session cookie over TLS only        |
@@ -391,7 +391,7 @@ UI is frontend-only (ADR 0015) and is not documented here.
 
 ### API model
 
-A Link is a JSON object: `hostname`, `code`, `destination`, `remark`,
+A Link is a JSON object: `base_url`, `code`, `destination`, `remark`,
 `forward_utm`, `disabled`, `created_by`, `team_id`, `created_at`, `updated_at`.
 `team_id` is `null` for Personal Links. `forward_utm` (default `false`) appends
 the six recognized `utm_*` parameters from a Visitor's short URL to the
@@ -417,7 +417,7 @@ Query parameters:
 - `limit` (breakdowns) — top-N, default `10`; `0` returns all values.
 
 The `hostname` query parameter was removed from every read/manage endpoint:
-a Code is globally unique, so Links are identified by Code alone. `hostname`
+a Code is globally unique, so Links are identified by Code alone. `base_url`
 is still required in the create request body (the target domain).
 
 ### Auth API (public, API keys)
@@ -433,8 +433,8 @@ not exposed. Requests are rate-limited per IP and per key (see the Auth API
 | Method | Path                                   | Purpose                                             |
 |--------|----------------------------------------|-----------------------------------------------------|
 | POST   | `/v1/links`                            | Create a Personal Link                              |
-| GET    | `/v1/links`                            | List the caller's Personal Links (across every Hostname) |
-| GET    | `/v1/hostnames`                        | List registered Hostnames                           |
+| GET    | `/v1/links`                            | List the caller's Personal Links (across every Base URL) |
+| GET    | `/v1/base-urls`                       | List registered Base URLs                            |
 | GET    | `/v1/links/{code}`                     | Get a Link (Personal or Team)                       |
 | PATCH  | `/v1/links/{code}`                     | Update a Link's Destination, Remark, Forward UTM   |
 | POST   | `/v1/links/{code}/disable`             | Disable a Link                                      |
@@ -454,7 +454,7 @@ revoked on the Account page of the UI.
 
 ## Terminology
 
-This project uses a precise domain vocabulary (Link, Code, Hostname,
+This project uses a precise domain vocabulary (Link, Code, Base URL,
 Destination, Remark, Visit, Visitor, Bot, Location, UTM Parameter, Forward UTM,
 Campaign, Redirect, Disabled, Delete,
 User, Admin, Creator, Personal Link, Team, Team Link, Team Owner, Team Member,

@@ -32,7 +32,7 @@ services:
       SHRL_API_INTERNAL_SECRET: ${SHRL_API_INTERNAL_SECRET:-dev-internal-secret}
       SHRL_ADMIN_USERNAME: ${SHRL_ADMIN_USERNAME:-admin}
       SHRL_ADMIN_PASSWORD: ${SHRL_ADMIN_PASSWORD:-}
-      SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
+      SHRL_DEFAULT_BASE_URL: ${SHRL_DEFAULT_BASE_URL:-http://localhost:8080}
       SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
       SHRL_API_ADDR: :8080
     # The Internal API is frontend-only (ADR 0015): reachable inside the
@@ -49,7 +49,7 @@ services:
     environment:
       SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
       SHRL_REDIS_ADDR: redis:6379
-      SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
+      SHRL_DEFAULT_BASE_URL: ${SHRL_DEFAULT_BASE_URL:-http://localhost:8080}
       SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
       SHRL_AUTH_ADDR: :8080
       SHRL_AUTH_RATE_LIMIT_IP: ${SHRL_AUTH_RATE_LIMIT_IP:-60}
@@ -100,7 +100,7 @@ services:
     environment:
       SHRL_API_URL: http://api:8080
       SHRL_API_INTERNAL_SECRET: ${SHRL_API_INTERNAL_SECRET:-dev-internal-secret}
-      SHRL_DEFAULT_HOSTNAME: ${SHRL_DEFAULT_HOSTNAME:-localhost}
+      SHRL_DEFAULT_BASE_URL: ${SHRL_DEFAULT_BASE_URL:-http://localhost:8080}
       SHRL_SESSION_SECRET: ${SHRL_SESSION_SECRET:-dev-session-secret}
       SHRL_COOKIE_SECURE: ${SHRL_COOKIE_SECURE:-false}
     ports:

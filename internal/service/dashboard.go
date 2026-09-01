@@ -16,7 +16,7 @@ const dashboardBreakdownLimit = 10
 // DashboardTopLink is one link's window totals for the dashboard ranking.
 type DashboardTopLink struct {
 	Code           string `json:"code"`
-	Hostname       string `json:"hostname"`
+	BaseURL        string `json:"base_url"`
 	Visits         int64  `json:"visits"`
 	UniqueVisitors int64  `json:"unique_visitors"`
 }
@@ -78,7 +78,7 @@ func (s *LinkService) dashboardForLinks(ctx context.Context, links []domain.Link
 		Environment: map[string][]DashboardBreakdownItem{},
 		Location:    map[string][]DashboardBreakdownItem{},
 	}
-	hostnameOf := make(map[string]string, len(links))
+	baseURLOf := make(map[string]string, len(links))
 	codes := make([]string, 0, len(links))
 	for _, l := range links {
 		if l.Disabled {
@@ -86,7 +86,7 @@ func (s *LinkService) dashboardForLinks(ctx context.Context, links []domain.Link
 		} else {
 			d.ActiveLinks++
 		}
-		hostnameOf[l.Code] = l.Hostname
+		baseURLOf[l.Code] = l.BaseURL
 		codes = append(codes, l.Code)
 	}
 	if len(codes) == 0 {
@@ -114,8 +114,8 @@ func (s *LinkService) dashboardForLinks(ctx context.Context, links []domain.Link
 	if err != nil {
 		return Dashboard{}, err
 	}
-	d.TopByVisits = topLinks(totals, hostnameOf, true, dashboardBreakdownLimit)
-	d.TopByVisitors = topLinks(totals, hostnameOf, false, dashboardBreakdownLimit)
+	d.TopByVisits = topLinks(totals, baseURLOf, true, dashboardBreakdownLimit)
+	d.TopByVisitors = topLinks(totals, baseURLOf, false, dashboardBreakdownLimit)
 
 	sourceItems, err := s.analytics.GetBreakdownsForCodes(ctx, codes, "referrer", from, to, dashboardBreakdownLimit)
 	if err != nil {
@@ -140,7 +140,7 @@ func (s *LinkService) dashboardForLinks(ctx context.Context, links []domain.Link
 	return d, nil
 }
 
-func topLinks(totals []store.CodeTotals, hostnameOf map[string]string, byVisits bool, limit int) []DashboardTopLink {
+func topLinks(totals []store.CodeTotals, baseURLOf map[string]string, byVisits bool, limit int) []DashboardTopLink {
 	sorted := make([]store.CodeTotals, len(totals))
 	copy(sorted, totals)
 	if byVisits {
@@ -156,7 +156,7 @@ func topLinks(totals []store.CodeTotals, hostnameOf map[string]string, byVisits 
 		t := sorted[i]
 		out = append(out, DashboardTopLink{
 			Code:           t.Code,
-			Hostname:       hostnameOf[t.Code],
+			BaseURL:        baseURLOf[t.Code],
 			Visits:         t.Visits,
 			UniqueVisitors: t.Uniques,
 		})
@@ -259,10 +259,10 @@ func (s *LinkService) GetTeamTopLinks(ctx context.Context, u *domain.User, teamI
 
 // topLinksForLinks ranks a fixed set of links within a window.
 func (s *LinkService) topLinksForLinks(ctx context.Context, links []domain.Link, from, to time.Time, byVisits bool, limit int) ([]DashboardTopLink, error) {
-	hostnameOf := make(map[string]string, len(links))
+	baseURLOf := make(map[string]string, len(links))
 	codes := make([]string, 0, len(links))
 	for _, l := range links {
-		hostnameOf[l.Code] = l.Hostname
+		baseURLOf[l.Code] = l.BaseURL
 		codes = append(codes, l.Code)
 	}
 	if len(codes) == 0 {
@@ -272,7 +272,7 @@ func (s *LinkService) topLinksForLinks(ctx context.Context, links []domain.Link,
 	if err != nil {
 		return nil, err
 	}
-	return topLinks(totals, hostnameOf, byVisits, limit), nil
+	return topLinks(totals, baseURLOf, byVisits, limit), nil
 }
 
 func breakdownItems(items []store.BreakdownValues) []DashboardBreakdownItem {
