@@ -17,7 +17,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { KeyRound, Plus, TriangleAlert, Users } from '@lucide/svelte';
+	import { ChevronRight, KeyRound, Plus, TriangleAlert, Users } from '@lucide/svelte';
 
 	const isAdmin = $derived(page.data.user?.isAdmin ?? false);
 
@@ -32,6 +32,11 @@
 	let joinCode = $state('');
 	let joining = $state(false);
 	let joinError = $state('');
+
+	// GET /teams returns every Team to an Admin, with an empty role for
+	// Teams they do not belong to; everyone else sees only memberships.
+	let myTeams = $derived(teams.filter((t) => t.role !== ''));
+	let otherTeams = $derived(teams.filter((t) => t.role === ''));
 
 	onMount(async () => {
 		try {
@@ -76,62 +81,131 @@
 </svelte:head>
 
 <h1 class="text-2xl font-semibold tracking-tight">Teams</h1>
+<p class="mt-1 text-sm text-muted-foreground">
+	Teams own Links. Members read them; their Creators and Team Owners manage them.
+</p>
 
-<div class="mt-4 grid gap-6 lg:grid-cols-3">
-	<div class="lg:col-span-2">
-		<Card>
-			<CardHeader>
-				<CardTitle>Your Teams</CardTitle>
-				<CardDescription>
-					Team Members read a Team's Links; its Creator and Team Owners manage them.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				{#if error}
-					<Alert variant="destructive">
-						<TriangleAlert class="size-4" />
-						<AlertTitle>Failed to load Teams</AlertTitle>
-						<AlertDescription>{error}</AlertDescription>
-					</Alert>
-				{:else if loading}
+<div class="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+	<div class="min-w-0 space-y-6">
+		{#if error}
+			<Alert variant="destructive">
+				<TriangleAlert class="size-4" />
+				<AlertTitle>Failed to load Teams</AlertTitle>
+				<AlertDescription>{error}</AlertDescription>
+			</Alert>
+		{:else if loading}
+			<Card>
+				<CardHeader>
+					<CardTitle>Your Teams</CardTitle>
+				</CardHeader>
+				<CardContent>
 					<div class="space-y-3">
 						{#each [0, 1, 2] as i (i)}
 							<Skeleton class="h-12 w-full" />
 						{/each}
 					</div>
-				{:else if teams.length === 0}
-					<p class="py-8 text-center text-sm text-muted-foreground">
-						You're not in any Teams yet. Join one with an invite code, or ask an Admin to create it.
-					</p>
-				{:else}
-					<ul class="divide-y">
-						{#each teams as team (team.id)}
-							<li>
-								<a
-									href={`/teams/${team.id}`}
-									class="flex items-center justify-between gap-2 py-3 hover:bg-muted/50"
-								>
-									<span class="flex min-w-0 items-center gap-2 font-medium">
-										<Users class="size-4 shrink-0 text-muted-foreground" />
-										<span class="truncate">{team.name}</span>
-									</span>
-									<span class="flex shrink-0 items-center gap-2">
-										{#if team.role === 'owner'}
-											<Badge>Owner</Badge>
-										{:else if team.role === 'member'}
-											<Badge variant="secondary">Member</Badge>
-										{:else}
-											<Badge variant="outline">Not a member</Badge>
-										{/if}
-										<span class="text-xs text-muted-foreground">{team.created_at.slice(0, 10)}</span>
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</CardContent>
-		</Card>
+				</CardContent>
+			</Card>
+		{:else if teams.length === 0}
+			<Card>
+				<CardHeader>
+					<CardTitle>Your Teams</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="flex items-center gap-3 py-2">
+						<div
+							class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground"
+						>
+							<Users class="size-4" />
+						</div>
+						<div>
+							<p class="text-sm font-medium">No Teams yet</p>
+							<p class="text-sm text-muted-foreground">
+								Join one with an invite code below{#if isAdmin}, or create one{/if}.
+							</p>
+						</div>
+					</div>
+				</CardContent>
+			</Card>
+		{:else}
+			{#if myTeams.length > 0}
+				<Card>
+					<CardHeader>
+						<CardTitle>Your Teams</CardTitle>
+						<CardDescription>
+							Team Members read a Team's Links; its Creator and Team Owners manage them.
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<ul class="divide-y">
+							{#each myTeams as team (team.id)}
+								<li>
+									<a
+										href={`/teams/${team.id}`}
+										class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/50"
+									>
+										<span
+											class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
+										>
+											{team.name.slice(0, 1).toUpperCase()}
+										</span>
+										<span class="min-w-0 flex-1 truncate font-medium">{team.name}</span>
+										<span class="flex shrink-0 items-center gap-3">
+											{#if team.role === 'owner'}
+												<Badge>Owner</Badge>
+											{:else}
+												<Badge variant="secondary">Member</Badge>
+											{/if}
+											<span class="hidden text-xs text-muted-foreground sm:inline">
+												{team.created_at.slice(0, 10)}
+											</span>
+											<ChevronRight class="size-4 text-muted-foreground" />
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</CardContent>
+				</Card>
+			{/if}
+
+			{#if isAdmin && otherTeams.length > 0}
+				<Card>
+					<CardHeader>
+						<CardTitle>Other Teams</CardTitle>
+						<CardDescription>
+							Teams on this instance you do not belong to. Manage each one from its
+							Settings page.
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<ul class="divide-y">
+							{#each otherTeams as team (team.id)}
+								<li>
+									<a
+										href={`/teams/${team.id}`}
+										class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/50"
+									>
+										<span
+											class="flex size-9 shrink-0 items-center justify-center rounded-full border bg-muted/50 text-sm font-semibold text-muted-foreground"
+										>
+											{team.name.slice(0, 1).toUpperCase()}
+										</span>
+										<span class="min-w-0 flex-1 truncate font-medium">{team.name}</span>
+										<span class="flex shrink-0 items-center gap-3">
+											<span class="hidden text-xs text-muted-foreground sm:inline">
+												{team.created_at.slice(0, 10)}
+											</span>
+											<ChevronRight class="size-4 text-muted-foreground" />
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</CardContent>
+				</Card>
+			{/if}
+		{/if}
 	</div>
 
 	<div class="space-y-6">
@@ -194,7 +268,13 @@
 				>
 					<div class="space-y-2">
 						<Label for="join-code">Invite code</Label>
-						<Input id="join-code" bind:value={joinCode} placeholder="ABC12345" required />
+						<Input
+							id="join-code"
+							bind:value={joinCode}
+							placeholder="ABC12345"
+							required
+							oninput={() => (joinError = '')}
+						/>
 					</div>
 					<Button type="submit" class="w-full" disabled={joining}>
 						{#if joining}

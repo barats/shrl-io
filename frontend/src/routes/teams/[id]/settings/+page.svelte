@@ -4,6 +4,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { api } from '$lib/api';
 	import type { User } from '$lib/types';
+	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Button } from '$lib/components/ui/button';
 	import {
@@ -16,7 +17,7 @@
 	} from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { LogOut, Save, Trash2, TriangleAlert } from '@lucide/svelte';
+	import { Check, LogOut, Save, Trash2, TriangleAlert } from '@lucide/svelte';
 
 	const teamId = $derived(Number(page.params.id));
 	const team = $derived(page.data.team);
@@ -26,6 +27,9 @@
 
 	let me = $state<User | null>(null);
 	let error = $state('');
+
+	// In-app confirm dialog for destructive actions (replaces native confirm()).
+	let confirmRequest = $state<ConfirmRequest | null>(null);
 
 	let renameName = $state('');
 	let renaming = $state(false);
@@ -56,25 +60,39 @@
 		}
 	}
 
-	async function leave() {
+	function leave() {
 		if (!me) return;
-		if (!window.confirm('Leave this Team? Your Links stay with the Team.')) return;
-		try {
-			await api.removeTeamMember(teamId, me.id);
-			await goto('/teams');
-		} catch (e) {
-			error = (e as Error).message;
-		}
+		const meId = me.id;
+		confirmRequest = {
+			title: 'Leave this Team?',
+			description: 'Your Links stay with the Team. You can rejoin with a new invite code.',
+			confirmLabel: 'Leave',
+			action: async () => {
+				try {
+					await api.removeTeamMember(teamId, meId);
+					await goto('/teams');
+				} catch (e) {
+					error = (e as Error).message;
+				}
+			}
+		};
 	}
 
-	async function removeTeam() {
-		if (!window.confirm('Delete this Team? Its Links revert to Personal for their Creators.')) return;
-		try {
-			await api.deleteTeam(teamId);
-			await goto('/teams');
-		} catch (e) {
-			error = (e as Error).message;
-		}
+	function removeTeam() {
+		confirmRequest = {
+			title: 'Delete this Team?',
+			description: 'Its Links revert to Personal for their Creators. This cannot be undone.',
+			confirmLabel: 'Delete',
+			destructive: true,
+			action: async () => {
+				try {
+					await api.deleteTeam(teamId);
+					await goto('/teams');
+				} catch (e) {
+					error = (e as Error).message;
+				}
+			}
+		};
 	}
 </script>
 
@@ -135,7 +153,10 @@
 				</div>
 			</form>
 			{#if renamed}
-				<p class="mt-2 text-sm text-emerald-600">Team renamed.</p>
+				<Alert class="mt-3">
+					<Check class="size-4" />
+					<AlertDescription>Team renamed.</AlertDescription>
+				</Alert>
 			{/if}
 		</CardContent>
 	</Card>
@@ -151,7 +172,7 @@
 					<p class="text-sm font-medium">Leave Team</p>
 					<p class="text-xs text-muted-foreground">Your Links stay with the Team.</p>
 				</div>
-				<Button variant="outline" onclick={leave}>
+				<Button variant="outline" disabled={confirmRequest !== null} onclick={leave}>
 					<LogOut class="size-4" /> Leave
 				</Button>
 			</div>
@@ -161,7 +182,11 @@
 						<p class="text-sm font-medium text-destructive">Delete Team</p>
 						<p class="text-xs text-muted-foreground">Its Links revert to Personal for their Creators.</p>
 					</div>
-					<Button variant="destructive" onclick={removeTeam}>
+					<Button
+						variant="destructive"
+						disabled={confirmRequest !== null}
+						onclick={removeTeam}
+					>
 						<Trash2 class="size-4" /> Delete Team
 					</Button>
 				</div>
@@ -169,3 +194,5 @@
 		</CardContent>
 	</Card>
 </div>
+
+<ConfirmDialog request={confirmRequest} onclose={() => (confirmRequest = null)} />

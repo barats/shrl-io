@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-	import type { Team, User } from '$lib/types';
+	import type { User } from '$lib/types';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
+	import SectionNav from '$lib/components/SectionNav.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -32,8 +33,7 @@
 		Plus,
 		Trash2,
 		TriangleAlert,
-		UserPlus,
-		Users
+		UserPlus
 	} from '@lucide/svelte';
 
 	let me = $state<User | null>(null);
@@ -68,71 +68,15 @@
 	let codeLengthSaved = $state(false);
 	let codeLengthError = $state('');
 
-	// Teams
-	let teams = $state<Team[]>([]);
-	let tLoading = $state(true);
-	let tError = $state('');
-	let newTeamName = $state('');
-	let creatingTeam = $state(false);
-	let teamCreateError = $state('');
-	let teamActionError = $state('');
-
 	// In-app confirm dialog for destructive actions (replaces native confirm()).
 	let confirmRequest = $state<ConfirmRequest | null>(null);
 
-	// Section rail: anchored sections with an IntersectionObserver-driven
-	// active state (no scroll listeners).
 	const sections = [
 		{ id: 'code-generation', label: 'Code generation' },
 		{ id: 'base-urls', label: 'Base URLs' },
-		{ id: 'accounts', label: 'Accounts' },
-		{ id: 'teams', label: 'Teams' }
+		{ id: 'accounts', label: 'Accounts' }
 	];
-	let activeSection = $state(sections[0].id);
 	let secretCopied = $state('');
-
-	// Set while a rail click drives the scroll; the observer must not fight it.
-	let autoScrolling = $state(false);
-	let scrollTimer: ReturnType<typeof setTimeout> | undefined;
-
-	function scrollToSection(id: string) {
-		activeSection = id;
-		history.replaceState(null, '', `#${id}`);
-		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-		document.getElementById(id)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
-		autoScrolling = true;
-		clearTimeout(scrollTimer);
-		scrollTimer = setTimeout(() => (autoScrolling = false), 800);
-	}
-
-	onMount(() => {
-		const observer = new IntersectionObserver(
-			() => {
-				if (autoScrolling) return;
-				// Active = last section whose top passed the upper viewport band;
-				// at the bottom of the page it is always the last section.
-				if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
-					activeSection = sections[sections.length - 1].id;
-					return;
-				}
-				let current = sections[0].id;
-				for (const s of sections) {
-					const el = document.getElementById(s.id);
-					if (el && el.getBoundingClientRect().top <= 140) current = s.id;
-				}
-				activeSection = current;
-			},
-			{ rootMargin: '0px 0px -75% 0px' }
-		);
-		for (const s of sections) {
-			const el = document.getElementById(s.id);
-			if (el) observer.observe(el);
-		}
-		return () => {
-			observer.disconnect();
-			clearTimeout(scrollTimer);
-		};
-	});
 
 	onMount(async () => {
 		try {
@@ -140,7 +84,7 @@
 		} catch {
 			/* session is required; the layout guards it */
 		}
-		await Promise.all([loadCodeLength(), loadBaseURLs(), loadUsers(), loadTeams()]);
+		await Promise.all([loadCodeLength(), loadBaseURLs(), loadUsers()]);
 	});
 
 	async function loadCodeLength() {
@@ -289,50 +233,6 @@
 		};
 	}
 
-	async function loadTeams() {
-		tLoading = true;
-		tError = '';
-		try {
-			teams = await api.listTeams();
-		} catch (e) {
-			tError = (e as Error).message;
-		} finally {
-			tLoading = false;
-		}
-	}
-
-	async function createTeam() {
-		creatingTeam = true;
-		teamCreateError = '';
-		try {
-			await api.createTeam(newTeamName);
-			newTeamName = '';
-			await loadTeams();
-		} catch (e) {
-			teamCreateError = (e as Error).message;
-		} finally {
-			creatingTeam = false;
-		}
-	}
-
-	function deleteTeam(team: Team) {
-		confirmRequest = {
-			title: `Delete ${team.name}?`,
-			description: 'Its Links revert to Personal. This cannot be undone.',
-			confirmLabel: 'Delete',
-			destructive: true,
-			action: async () => {
-				teamActionError = '';
-				try {
-					await api.deleteTeam(team.id);
-					await loadTeams();
-				} catch (e) {
-					teamActionError = (e as Error).message;
-				}
-			}
-		};
-	}
-
 	async function copySecret(secret: string) {
 		try {
 			await navigator.clipboard.writeText(secret);
@@ -350,32 +250,12 @@
 
 <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 <p class="mt-1 text-sm text-muted-foreground">
-	Instance administration: Code length, Base URLs, accounts, and Teams.
+	Instance administration: Code length, Base URLs, and accounts. Teams live on the
+	Teams page.
 </p>
 
 <div class="mt-6 grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
-	<nav class="sticky top-8 hidden self-start md:block" aria-label="Settings sections">
-		<ul class="space-y-1">
-			{#each sections as s (s.id)}
-				<li>
-					<a
-						href={'#' + s.id}
-						aria-current={activeSection === s.id ? 'true' : undefined}
-						onclick={(e) => {
-							e.preventDefault();
-							scrollToSection(s.id);
-						}}
-						class="block border-l-2 py-1.5 pl-3 text-sm transition-colors {activeSection ===
-						s.id
-							? 'border-foreground font-medium text-foreground'
-							: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
-					>
-						{s.label}
-					</a>
-				</li>
-			{/each}
-		</ul>
-	</nav>
+	<SectionNav {sections} label="Settings sections" />
 
 	<div class="min-w-0 max-w-3xl space-y-6">
 		<section id="code-generation" class="scroll-mt-8">
@@ -714,100 +594,6 @@
 			</Card>
 		</section>
 
-		<section id="teams" class="scroll-mt-8">
-			<Card>
-				<CardHeader>
-					<CardTitle>Teams</CardTitle>
-					<CardDescription>
-						Teams own Links; their members read them. Deleting a Team reverts its Links to
-						Personal.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{#if teamActionError}
-						<Alert variant="destructive" class="mb-4">
-							<TriangleAlert class="size-4" />
-							<AlertDescription>{teamActionError}</AlertDescription>
-						</Alert>
-					{/if}
-					{#if tError}
-						<Alert variant="destructive" class="mb-4">
-							<TriangleAlert class="size-4" />
-							<AlertTitle>Could not load Teams</AlertTitle>
-							<AlertDescription>{tError}</AlertDescription>
-						</Alert>
-					{:else if tLoading}
-						<div class="space-y-3">
-							{#each [0, 1, 2] as i (i)}
-								<Skeleton class="h-10 w-full" />
-							{/each}
-						</div>
-					{:else if teams.length === 0}
-						<div class="flex items-center gap-3 py-2">
-							<div
-								class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground"
-							>
-								<Users class="size-4" />
-							</div>
-							<div>
-								<p class="text-sm font-medium">No Teams yet</p>
-								<p class="text-sm text-muted-foreground">Create the first Team below.</p>
-							</div>
-						</div>
-					{:else}
-						<ul class="divide-y">
-							{#each teams as team (team.id)}
-								<li class="flex items-center justify-between gap-2 py-2.5">
-									<a
-										href={`/teams/${team.id}`}
-										class="flex min-w-0 items-center gap-2 font-medium hover:underline"
-									>
-										<Users class="size-4 shrink-0 text-muted-foreground" />
-										<span class="truncate">{team.name}</span>
-									</a>
-									<span class="flex shrink-0 items-center gap-2">
-										{#if team.role === 'owner'}
-											<Badge>Owner</Badge>
-										{:else if team.role === 'member'}
-											<Badge variant="secondary">Member</Badge>
-										{:else}
-											<Badge variant="outline">Not a member</Badge>
-										{/if}
-										<Button
-											variant="ghost"
-											size="sm"
-											title="Delete team"
-											disabled={confirmRequest !== null}
-											onclick={() => deleteTeam(team)}
-										>
-											<Trash2 class="size-4" />
-										</Button>
-									</span>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-					<form
-						onsubmit={(e) => {
-							e.preventDefault();
-							createTeam();
-						}}
-						class="mt-4 flex gap-2"
-					>
-						<Input
-							placeholder="New team name"
-							bind:value={newTeamName}
-							class="flex-1"
-							aria-label="New team name"
-							required
-						/>
-						<Button type="submit" disabled={creatingTeam}>
-							<Plus class="size-4" /> Create
-						</Button>
-					</form>
-				</CardContent>
-			</Card>
-		</section>
 	</div>
 </div>
 
