@@ -12,7 +12,7 @@
 	const isLogin = $derived(page.url.pathname === '/login');
 	// A Team route (a numeric id under /teams) renders its own navbar from the
 	// nested teams/[id] layout; everything else shows the personal navbar.
-	const isTeamRoute = $derived(/^\/teams\/\d+(\/|$)/.test(page.url.pathname));
+	const isTeamRoute = $derived(/^\/teams\/[^/]+(\/|$)/.test(page.url.pathname));
 
 	const path = $derived(page.url.pathname);
 	const nav = $derived([

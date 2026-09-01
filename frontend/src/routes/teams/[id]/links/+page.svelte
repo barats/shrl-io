@@ -8,7 +8,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Plus } from '@lucide/svelte';
 
-	const teamId = $derived(Number(page.params.id));
+	const teamId = $derived(page.params.id ?? '');
 	const myRole = $derived(page.data.myRole);
 	// Per the domain rules an Admin holds no implicit role in a Team, so
 	// only actual members (myRole is null for outsider admins) can create

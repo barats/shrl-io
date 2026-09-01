@@ -14,9 +14,9 @@
 		currentTeamId = null
 	}: {
 		username: string;
-		teams: { id: number; name: string; role: string }[];
+		teams: { id: string; name: string; role: string }[];
 		isAdmin?: boolean;
-		currentTeamId?: number | null;
+		currentTeamId?: string | null;
 	} = $props();
 
 	let open = $state(false);

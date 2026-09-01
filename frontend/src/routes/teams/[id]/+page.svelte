@@ -26,7 +26,7 @@
 	import type { DashboardBreakdownItem, DashboardStats, DashboardTopLink } from '$lib/types';
 
 	const RANGE_KEY = 'shrl:range:preset';
-	const teamId = $derived(Number(page.params.id));
+	const teamId = $derived(page.params.id ?? '');
 
 	let data = $state<DashboardStats | null>(null);
 	let range = $state<DateRange>(rangeForPreset('7d'));

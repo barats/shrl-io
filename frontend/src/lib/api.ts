@@ -180,14 +180,14 @@ export const api = {
 		return req<DashboardTopLink[]>(`stats/top-links?${q}`);
 	},
 
-	async getTeamStats(id: number, from?: string, to?: string): Promise<Stats> {
+	async getTeamStats(id: string, from?: string, to?: string): Promise<Stats> {
 		const q = new URLSearchParams();
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
 		return req<Stats>(`teams/${id}/stats?${q}`);
 	},
 
-	async getTeamDashboard(id: number, from?: string, to?: string): Promise<DashboardStats> {
+	async getTeamDashboard(id: string, from?: string, to?: string): Promise<DashboardStats> {
 		const q = new URLSearchParams();
 		if (from) q.set('from', from);
 		if (to) q.set('to', to);
@@ -195,7 +195,7 @@ export const api = {
 	},
 
 	async getTeamStatsBreakdowns(
-		id: number,
+		id: string,
 		dimension: string,
 		from?: string,
 		to?: string,
@@ -208,7 +208,7 @@ export const api = {
 	},
 
 	async getTeamTopLinks(
-		id: number,
+		id: string,
 		from?: string,
 		to?: string,
 		metric: 'visits' | 'visitors' = 'visits',
@@ -271,11 +271,11 @@ export const api = {
 		});
 	},
 
-	async getTeam(id: number): Promise<TeamDetail> {
+	async getTeam(id: string): Promise<TeamDetail> {
 		return req<TeamDetail>(`teams/${id}`);
 	},
 
-	async renameTeam(id: number, name: string): Promise<TeamDetail> {
+	async renameTeam(id: string, name: string): Promise<TeamDetail> {
 		return req<TeamDetail>(`teams/${id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
@@ -283,12 +283,12 @@ export const api = {
 		});
 	},
 
-	async listTeamLinks(id: number): Promise<Link[]> {
+	async listTeamLinks(id: string): Promise<Link[]> {
 		return req<Link[]>(`teams/${id}/links`);
 	},
 
 	async createTeamLink(
-		id: number,
+		id: string,
 		input: CreateLinkInput
 	): Promise<Link> {
 		return req<Link>(`teams/${id}/links`, {
@@ -298,7 +298,7 @@ export const api = {
 		});
 	},
 
-	async addTeamMember(id: number, username: string): Promise<TeamMember> {
+	async addTeamMember(id: string, username: string): Promise<TeamMember> {
 		return req<TeamMember>(`teams/${id}/members`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -306,33 +306,33 @@ export const api = {
 		});
 	},
 
-	async setTeamMemberRole(id: number, userId: number, role: TeamRole): Promise<TeamMember> {
-		return req<TeamMember>(`teams/${id}/members/${userId}`, {
+	async setTeamMemberRole(id: string, username: string, role: TeamRole): Promise<TeamMember> {
+		return req<TeamMember>(`teams/${id}/members/${encodeURIComponent(username)}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ role })
 		});
 	},
 
-	async removeTeamMember(id: number, userId: number): Promise<void> {
-		return req<void>(`teams/${id}/members/${userId}`, { method: 'DELETE' });
+	async removeTeamMember(id: string, username: string): Promise<void> {
+		return req<void>(`teams/${id}/members/${encodeURIComponent(username)}`, { method: 'DELETE' });
 	},
 
-	async deleteTeam(id: number): Promise<void> {
+	async deleteTeam(id: string): Promise<void> {
 		return req<void>(`teams/${id}`, { method: 'DELETE' });
 	},
 
 	// --- Invite codes ---
 
-	async createInvite(id: number): Promise<InviteCode> {
+	async createInvite(id: string): Promise<InviteCode> {
 		return req<InviteCode>(`teams/${id}/invites`, { method: 'POST' });
 	},
 
-	async listInvites(id: number): Promise<InviteCode[]> {
+	async listInvites(id: string): Promise<InviteCode[]> {
 		return req<InviteCode[]>(`teams/${id}/invites`);
 	},
 
-	async revokeInvite(id: number, code: string): Promise<void> {
+	async revokeInvite(id: string, code: string): Promise<void> {
 		return req<void>(`teams/${id}/invites/${encodeURIComponent(code)}`, { method: 'DELETE' });
 	},
 

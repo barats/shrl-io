@@ -5,26 +5,26 @@ export interface Link {
 	remark: string;
 	disabled: boolean;
 	forward_utm: boolean;
-	created_by: number;
-	team_id: number | null;
+	created_by: string;
+	team_id: string | null;
 	created_at: string;
 	updated_at: string;
 }
 
 export type TeamRole = 'owner' | 'member';
 
-// Team as returned by GET /teams: role is the caller's role, empty for an
-// admin viewing a team they do not belong to.
+// Team as returned by GET /teams: id is the opaque team Ref (ADR 0021) and
+// role is the caller's role, empty for an admin viewing a team they do not
+// belong to.
 export interface Team {
-	id: number;
+	id: string;
 	name: string;
-	created_by: number;
+	created_by: string;
 	created_at: string;
 	role: TeamRole | '';
 }
 
 export interface TeamMember {
-	id: number;
 	username: string;
 	role: TeamRole;
 	joined_at: string;
@@ -32,20 +32,19 @@ export interface TeamMember {
 
 // Team detail as returned by GET /teams/{id}: adds the member list.
 export interface TeamDetail {
-	id: number;
+	id: string;
 	name: string;
-	created_by: number;
+	created_by: string;
 	created_at: string;
 	members: TeamMember[];
 }
 
 export interface InviteCode {
-	id: number;
-	team_id: number;
+	team_id: string;
 	code: string;
-	created_by: number;
+	created_by: string;
 	created_at: string;
-	used_by: number | null;
+	used_by: string | null;
 	used_at: string | null;
 }
 

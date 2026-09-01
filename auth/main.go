@@ -235,7 +235,7 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, l)
+	writeJSON(w, http.StatusCreated, s.linkJSON(r, l))
 }
 
 func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
@@ -248,10 +248,7 @@ func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
 	}
-	if links == nil {
-		links = []domain.Link{}
-	}
-	writeJSON(w, http.StatusOK, links)
+	s.writeLinks(w, r, links)
 }
 
 func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
@@ -260,7 +257,7 @@ func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, l)
+	writeJSON(w, http.StatusOK, s.linkJSON(r, l))
 }
 
 func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +279,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, l)
+	writeJSON(w, http.StatusOK, s.linkJSON(r, l))
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
@@ -291,7 +288,7 @@ func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bo
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, l)
+	writeJSON(w, http.StatusOK, s.linkJSON(r, l))
 }
 
 func (s *server) disableLink(w http.ResponseWriter, r *http.Request) {
@@ -310,25 +307,84 @@ func (s *server) listTeams(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(summaries))
 	for _, ts := range summaries {
-		items = append(items, map[string]any{
-			"id":         ts.Team.ID,
-			"name":       ts.Team.Name,
-			"created_by": ts.Team.CreatedBy,
-			"created_at": ts.Team.CreatedAt,
-			"role":       ts.Role,
-		})
+		items = append(items, s.teamJSON(r, &ts.Team, ts.Role))
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// teamByRef loads the team from the {id} path segment, which carries the
+// team's opaque Ref (ADR 0021). An unknown or malformed ref and a team the
+// caller cannot see are indistinguishable: both are 404 team not found.
+func (s *server) teamByRef(w http.ResponseWriter, r *http.Request) (*domain.Team, bool) {
+	t, err := s.teams.GetByRef(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "team not found")
+		return nil, false
+	}
+	return t, true
+}
+
+// usernameByID resolves a user's username, falling back to "" when the
+// account has vanished; ids never leave the database (ADR 0021).
+func (s *server) usernameByID(r *http.Request, id int64) string {
+	u, err := s.users.GetByID(r.Context(), id)
+	if err != nil {
+		return ""
+	}
+	return u.Username
+}
+
+// teamJSON renders the common team shape: id is the Ref, created_by the
+// creator's username, role the caller's role.
+func (s *server) teamJSON(r *http.Request, t *domain.Team, role domain.TeamRole) map[string]any {
+	return map[string]any{
+		"id":         t.Ref,
+		"name":       t.Name,
+		"created_by": s.usernameByID(r, t.CreatedBy),
+		"created_at": t.CreatedAt,
+		"role":       role,
+	}
+}
+
+// linkJSON renders a Link with only opaque external identifiers (ADR 0021):
+// team_id is the team's Ref (null for Personal links) and created_by is the
+// creator's username.
+func (s *server) linkJSON(r *http.Request, l *domain.Link) map[string]any {
+	out := map[string]any{
+		"base_url":    l.BaseURL,
+		"code":        l.Code,
+		"destination": l.Destination,
+		"remark":      l.Remark,
+		"disabled":    l.Disabled,
+		"forward_utm": l.ForwardUTM,
+		"created_by":  s.usernameByID(r, l.CreatedBy),
+		"team_id":     nil,
+		"created_at":  l.CreatedAt,
+		"updated_at":  l.UpdatedAt,
+	}
+	if l.TeamID != nil {
+		if t, err := s.teams.Get(r.Context(), *l.TeamID); err == nil {
+			out["team_id"] = t.Ref
+		}
+	}
+	return out
+}
+
+// writeLinks renders a Link list with ids mapped per linkJSON.
+func (s *server) writeLinks(w http.ResponseWriter, r *http.Request, links []domain.Link) {
+	items := make([]map[string]any, 0, len(links))
+	for i := range links {
+		items = append(items, s.linkJSON(r, &links[i]))
 	}
 	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *server) getTeam(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
-	t, err := s.svc.GetTeam(r.Context(), currentUser(r), id)
-	if err != nil {
+	if _, err := s.svc.GetTeam(r.Context(), currentUser(r), t.ID); err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "team not found")
 			return
@@ -336,21 +392,15 @@ func (s *server) getTeam(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         t.ID,
-		"name":       t.Name,
-		"created_by": t.CreatedBy,
-		"created_at": t.CreatedAt,
-	})
+	writeJSON(w, http.StatusOK, s.teamJSON(r, t, ""))
 }
 
 func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
-	if _, err := s.svc.GetTeam(r.Context(), currentUser(r), id); err != nil {
+	if _, err := s.svc.GetTeam(r.Context(), currentUser(r), t.ID); err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "team not found")
 			return
@@ -358,28 +408,24 @@ func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load team")
 		return
 	}
-	links, err := s.svc.ListTeamLinks(r.Context(), id)
+	links, err := s.svc.ListTeamLinks(r.Context(), t.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
 	}
-	if links == nil {
-		links = []domain.Link{}
-	}
-	writeJSON(w, http.StatusOK, links)
+	s.writeLinks(w, r, links)
 }
 
 func (s *server) createTeamLink(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
-	if !s.svc.TeamMember(r.Context(), currentUser(r), id) {
+	if !s.svc.TeamMember(r.Context(), currentUser(r), t.ID) {
 		writeError(w, http.StatusForbidden, "not a team member")
 		return
 	}
-	s.createLinkInScope(w, r, &id)
+	s.createLinkInScope(w, r, &t.ID)
 }
 
 func (s *server) listBaseURLs(w http.ResponseWriter, r *http.Request) {
@@ -405,13 +451,12 @@ func (s *server) getStats(w http.ResponseWriter, r *http.Request) {
 // getTeamStats returns aggregate analytics across a team's links, read-only
 // for members.
 func (s *server) getTeamStats(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
 	from, to := s.svc.StatsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	st, err := s.svc.GetTeamStats(r.Context(), currentUser(r), id, from, to)
+	st, err := s.svc.GetTeamStats(r.Context(), currentUser(r), t.ID, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return

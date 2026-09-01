@@ -60,7 +60,7 @@
 
 	const RANGE_KEY = 'shrl:range:preset';
 
-	let { code, teamId }: { code: string; teamId?: number } = $props();
+	let { code, teamId }: { code: string; teamId?: string } = $props();
 
 	let link = $state<Link | null>(null);
 	let team = $state<TeamDetail | null>(null);
@@ -131,8 +131,8 @@
 	const canManage = $derived(
 		!!link &&
 			(teamId
-				? link.created_by === me?.id ||
-					team?.members.find((m) => m.id === me?.id)?.role === 'owner'
+				? link.created_by === me?.username ||
+					team?.members.find((m) => m.username === me?.username)?.role === 'owner'
 				: true)
 	);
 

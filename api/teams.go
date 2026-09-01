@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/barats/shrl-io/internal/domain"
@@ -12,19 +11,37 @@ import (
 	"github.com/barats/shrl-io/internal/store"
 )
 
-// teamByID parses and loads the team from the {id} path segment.
-func (s *server) teamByID(w http.ResponseWriter, r *http.Request) (*domain.Team, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
-		return nil, false
-	}
-	t, err := s.teams.Get(r.Context(), id)
+// teamByRef loads the team from the {id} path segment, which carries the
+// team's opaque Ref (ADR 0021). An unknown or malformed ref and a team the
+// caller cannot see are indistinguishable: both are 404 team not found.
+func (s *server) teamByRef(w http.ResponseWriter, r *http.Request) (*domain.Team, bool) {
+	t, err := s.teams.GetByRef(r.Context(), r.PathValue("id"))
 	if err != nil {
-		writeStoreError(w, err)
+		writeError(w, http.StatusNotFound, "team not found")
 		return nil, false
 	}
 	return t, true
+}
+
+// usernameByID resolves a user's username, falling back to "" when the
+// account has vanished; ids never leave the database (ADR 0021).
+func (s *server) usernameByID(r *http.Request, id int64) string {
+	u, err := s.users.GetByID(r.Context(), id)
+	if err != nil {
+		return ""
+	}
+	return u.Username
+}
+
+// teamJSON renders the common team shape: id is the Ref, created_by the
+// creator's username.
+func (s *server) teamJSON(r *http.Request, t *domain.Team) map[string]any {
+	return map[string]any{
+		"id":         t.Ref,
+		"name":       t.Name,
+		"created_by": s.usernameByID(r, t.CreatedBy),
+		"created_at": t.CreatedAt,
+	}
 }
 
 // requireTeamRead grants access to a team's details and links to its members
@@ -93,7 +110,9 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to add owner")
 		return
 	}
-	writeJSON(w, http.StatusCreated, t)
+	out := s.teamJSON(r, t)
+	out["role"] = domain.RoleOwner
+	writeJSON(w, http.StatusCreated, out)
 }
 
 // listTeams returns the caller's teams with their role; admins additionally
@@ -106,22 +125,17 @@ func (s *server) listTeams(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(summaries))
 	for _, ts := range summaries {
-		items = append(items, map[string]any{
-			"id":         ts.Team.ID,
-			"name":       ts.Team.Name,
-			"created_by": ts.Team.CreatedBy,
-			"created_at": ts.Team.CreatedAt,
-			"role":       ts.Role,
-		})
+		item := s.teamJSON(r, &ts.Team)
+		item["role"] = ts.Role
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, items)
 }
 
 // updateTeam renames a team (owner or admin; members get 403, outsiders 404).
 func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -131,7 +145,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if err := s.linkSvc.RenameTeam(r.Context(), currentUser(r), id, req.Name); err != nil {
+	if err := s.linkSvc.RenameTeam(r.Context(), currentUser(r), t.ID, req.Name); err != nil {
 		if errors.Is(err, service.ErrConflict) {
 			writeError(w, http.StatusConflict, "team name already exists")
 			return
@@ -139,17 +153,17 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	t, err := s.linkSvc.GetTeam(r.Context(), currentUser(r), id)
+	updated, err := s.linkSvc.GetTeam(r.Context(), currentUser(r), t.ID)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, t)
+	writeJSON(w, http.StatusOK, s.teamJSON(r, updated))
 }
 
 // getTeam returns a team with its members and roles.
 func (s *server) getTeam(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
@@ -168,24 +182,19 @@ func (s *server) getTeam(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		members = append(members, map[string]any{
-			"id":        u.ID,
 			"username":  u.Username,
 			"role":      m.Role,
 			"joined_at": m.JoinedAt,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         t.ID,
-		"name":       t.Name,
-		"created_by": t.CreatedBy,
-		"created_at": t.CreatedAt,
-		"members":    members,
-	})
+	out := s.teamJSON(r, t)
+	out["members"] = members
+	writeJSON(w, http.StatusOK, out)
 }
 
 // listTeamLinks returns the links of a team, read-only for members.
 func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
@@ -197,15 +206,12 @@ func (s *server) listTeamLinks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
 	}
-	if links == nil {
-		links = []domain.Link{}
-	}
-	writeJSON(w, http.StatusOK, links)
+	s.writeLinks(w, r, links)
 }
 
 // createTeamLink creates a Link in the team's scope.
 func (s *server) createTeamLink(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
@@ -219,7 +225,7 @@ func (s *server) createTeamLink(w http.ResponseWriter, r *http.Request) {
 // admin-only (ADR 0010): Team Owners invite members via single-use codes
 // instead, because only an Admin can see every account.
 func (s *server) addTeamMember(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
@@ -251,22 +257,22 @@ func (s *server) addTeamMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to add member")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": u.ID, "username": u.Username, "role": domain.RoleMember})
+	writeJSON(w, http.StatusCreated, map[string]any{"username": u.Username, "role": domain.RoleMember})
 }
 
 // setTeamMemberRole promotes or demotes a member; a team always keeps at
 // least one owner.
 func (s *server) setTeamMemberRole(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
 	if !s.requireTeamOwner(w, r, t.ID) {
 		return
 	}
-	targetID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil || targetID <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid user id")
+	target, err := s.users.GetByUsername(r.Context(), r.PathValue("username"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user is not a member")
 		return
 	}
 	var req struct {
@@ -280,7 +286,7 @@ func (s *server) setTeamMemberRole(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "role must be owner or member")
 		return
 	}
-	cur, err := s.teams.MemberRole(r.Context(), t.ID, targetID)
+	cur, err := s.teams.MemberRole(r.Context(), t.ID, target.ID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "user is not a member")
 		return
@@ -296,39 +302,35 @@ func (s *server) setTeamMemberRole(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.teams.SetRole(r.Context(), t.ID, targetID, req.Role); err != nil {
+	if err := s.teams.SetRole(r.Context(), t.ID, target.ID, req.Role); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update role")
 		return
 	}
-	u, err := s.users.GetByID(r.Context(), targetID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load member")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": u.ID, "username": u.Username, "role": req.Role})
+	writeJSON(w, http.StatusOK, map[string]any{"username": target.Username, "role": req.Role})
 }
 
 // removeTeamMember removes a member. An owner removes others; any member may
 // remove themselves (leave). A team always keeps at least one owner.
 func (s *server) removeTeamMember(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
-	targetID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil || targetID <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid user id")
-		return
-	}
+	username := r.PathValue("username")
 	u := currentUser(r)
-	if targetID == u.ID {
+	if username == u.Username {
 		if !s.requireTeamMember(w, r, t.ID) {
 			return
 		}
 	} else if !s.requireTeamOwner(w, r, t.ID) {
 		return
 	}
-	role, err := s.teams.MemberRole(r.Context(), t.ID, targetID)
+	target, err := s.users.GetByUsername(r.Context(), username)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user is not a member")
+		return
+	}
+	role, err := s.teams.MemberRole(r.Context(), t.ID, target.ID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "user is not a member")
 		return
@@ -344,7 +346,7 @@ func (s *server) removeTeamMember(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, err := s.teams.RemoveMember(r.Context(), t.ID, targetID); err != nil {
+	if _, err := s.teams.RemoveMember(r.Context(), t.ID, target.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to remove member")
 		return
 	}
@@ -357,7 +359,7 @@ func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
 	}
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}

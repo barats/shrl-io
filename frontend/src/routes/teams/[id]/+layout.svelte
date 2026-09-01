@@ -7,7 +7,7 @@
 
 	let { children, data } = $props();
 
-	const teamId = $derived(Number(page.params.id));
+	const teamId = $derived(page.params.id ?? '');
 	const team = $derived(data.team);
 	const path = $derived(page.url.pathname);
 

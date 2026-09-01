@@ -30,7 +30,7 @@
 		open: boolean;
 		baseURLs: string[];
 		defaultBaseURL: string;
-		teamId?: number;
+		teamId?: string;
 		onCreated?: () => void;
 	} = $props();
 

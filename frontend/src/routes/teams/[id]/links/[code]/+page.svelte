@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import LinkDetail from '$lib/components/LinkDetail.svelte';
 
-	const teamId = $derived(Number(page.params.id));
+	const teamId = $derived(page.params.id ?? '');
 	const code = $derived(page.params.code as string);
 </script>
 

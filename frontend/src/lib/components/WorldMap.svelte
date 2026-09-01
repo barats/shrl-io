@@ -19,7 +19,7 @@
 		teamId,
 		// When set, the map is scoped to a single link's country breakdown.
 		code
-	}: { from: string; to: string; teamId?: number; code?: string } = $props();
+	}: { from: string; to: string; teamId?: string; code?: string } = $props();
 
 	// world-atlas countries-110m is a known Topology; decode to GeoJSON once.
 	// Paths are stable, so only the fill color reacts to the fetched data.

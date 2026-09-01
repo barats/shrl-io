@@ -10,9 +10,35 @@ import (
 	"github.com/barats/shrl-io/internal/store"
 )
 
+// inviteJSON renders an invite with only opaque external identifiers
+// (ADR 0021): team_id is the team's Ref, created_by/used_by are usernames.
+func (s *server) inviteJSON(r *http.Request, inv *domain.InviteCode) map[string]any {
+	usedBy := any(nil)
+	if inv.UsedBy != nil {
+		usedBy = s.usernameByID(r, *inv.UsedBy)
+	}
+	return map[string]any{
+		"team_id":    s.teamRefByID(r, inv.TeamID),
+		"code":       inv.Code,
+		"created_by": s.usernameByID(r, inv.CreatedBy),
+		"created_at": inv.CreatedAt,
+		"used_by":    usedBy,
+		"used_at":    inv.UsedAt,
+	}
+}
+
+// teamRefByID resolves a team's Ref, "" when the team is gone.
+func (s *server) teamRefByID(r *http.Request, teamID int64) string {
+	t, err := s.teams.Get(r.Context(), teamID)
+	if err != nil {
+		return ""
+	}
+	return t.Ref
+}
+
 // createInvite generates a single-use invite code for a team (owner only).
 func (s *server) createInvite(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
@@ -29,12 +55,12 @@ func (s *server) createInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create invite code")
 		return
 	}
-	writeJSON(w, http.StatusCreated, inv)
+	writeJSON(w, http.StatusCreated, s.inviteJSON(r, inv))
 }
 
 // listInvites returns a team's outstanding invite codes (owner only).
 func (s *server) listInvites(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}
@@ -46,15 +72,16 @@ func (s *server) listInvites(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list invite codes")
 		return
 	}
-	if invites == nil {
-		invites = []domain.InviteCode{}
+	items := make([]map[string]any, 0, len(invites))
+	for i := range invites {
+		items = append(items, s.inviteJSON(r, &invites[i]))
 	}
-	writeJSON(w, http.StatusOK, invites)
+	writeJSON(w, http.StatusOK, items)
 }
 
 // revokeInvite deletes an outstanding invite code (owner only).
 func (s *server) revokeInvite(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.teamByID(w, r)
+	t, ok := s.teamByRef(w, r)
 	if !ok {
 		return
 	}

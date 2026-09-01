@@ -17,10 +17,56 @@ type TeamStore struct {
 func NewTeamStore(db *gorm.DB) *TeamStore { return &TeamStore{db: db} }
 
 func (s *TeamStore) Migrate(ctx context.Context) error {
-	return s.db.WithContext(ctx).AutoMigrate(&domain.Team{}, &domain.TeamMember{})
+	if err := s.db.WithContext(ctx).AutoMigrate(&domain.Team{}, &domain.TeamMember{}); err != nil {
+		return err
+	}
+	// Backfill Refs for rows created before ADR 0021, then enforce
+	// uniqueness. The index is created here rather than via a struct tag so
+	// pre-existing rows get a Ref before uniqueness applies.
+	var teams []domain.Team
+	if err := s.db.WithContext(ctx).Where("ref = '' OR ref IS NULL").Find(&teams).Error; err != nil {
+		return err
+	}
+	for i := range teams {
+		ref, err := s.newRef(ctx)
+		if err != nil {
+			return err
+		}
+		if err := s.db.WithContext(ctx).Model(&domain.Team{}).
+			Where("id = ?", teams[i].ID).Update("ref", ref).Error; err != nil {
+			return err
+		}
+	}
+	return s.db.WithContext(ctx).Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_ref ON teams (ref)`).Error
+}
+
+// newRef generates a random unused Ref (ADR 0021).
+func (s *TeamStore) newRef(ctx context.Context) (string, error) {
+	for range 5 {
+		ref, err := domain.GenerateRef()
+		if err != nil {
+			return "", err
+		}
+		var n int64
+		if err := s.db.WithContext(ctx).Model(&domain.Team{}).
+			Where("ref = ?", ref).Count(&n).Error; err != nil {
+			return "", err
+		}
+		if n == 0 {
+			return ref, nil
+		}
+	}
+	return "", errors.New("could not generate an unused team ref")
 }
 
 func (s *TeamStore) Create(ctx context.Context, t *domain.Team) error {
+	if t.Ref == "" {
+		ref, err := s.newRef(ctx)
+		if err != nil {
+			return err
+		}
+		t.Ref = ref
+	}
 	err := s.db.WithContext(ctx).Create(t).Error
 	if isDuplicateKey(err) {
 		return ErrDuplicatedKey
@@ -31,6 +77,19 @@ func (s *TeamStore) Create(ctx context.Context, t *domain.Team) error {
 func (s *TeamStore) Get(ctx context.Context, id int64) (*domain.Team, error) {
 	var t domain.Team
 	err := s.db.WithContext(ctx).First(&t, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// GetByRef loads a team by its opaque external identifier (ADR 0021).
+func (s *TeamStore) GetByRef(ctx context.Context, ref string) (*domain.Team, error) {
+	var t domain.Team
+	err := s.db.WithContext(ctx).Where("ref = ?", ref).First(&t).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}

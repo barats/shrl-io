@@ -139,7 +139,10 @@ func TestCreateAndManageLink(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create = %d, body %s", rec.Code, rec.Body.String())
 	}
-	var l domain.Link
+	var l struct {
+		Code        string `json:"code"`
+		Destination string `json:"destination"`
+	}
 	decode(t, rec, &l)
 	if l.Code == "" || l.Destination != "https://example.com" {
 		t.Fatalf("created link = %+v", l)
@@ -208,7 +211,10 @@ func TestNoDeleteOnAuthAPI(t *testing.T) {
 	_, key := newKeyUser(t, s, "alice")
 
 	rec := do(t, s, "POST", "/v1/links", key, map[string]any{"destination": "https://example.com"})
-	var l domain.Link
+	var l struct {
+		Code        string `json:"code"`
+		Destination string `json:"destination"`
+	}
 	decode(t, rec, &l)
 
 	// the delete route is not registered: 405, and the link survives
@@ -232,23 +238,33 @@ func TestTeamLinksOnAuthAPI(t *testing.T) {
 	if err := s.teams.AddMember(context.Background(), team.ID, aliceID, domain.RoleOwner); err != nil {
 		t.Fatal(err)
 	}
+	if team.Ref == "" {
+		t.Fatal("team created without a ref")
+	}
 
 	// alice (member) creates a team link
-	rec := do(t, s, "POST", "/v1/teams/"+itoa(team.ID)+"/links", aliceKey, map[string]any{"destination": "https://example.com"})
+	rec := do(t, s, "POST", "/v1/teams/"+team.Ref+"/links", aliceKey, map[string]any{"destination": "https://example.com"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create team link = %d, body %s", rec.Code, rec.Body.String())
 	}
 	// bob (not a member) cannot
-	if rec := do(t, s, "POST", "/v1/teams/"+itoa(team.ID)+"/links", bobKey, map[string]any{"destination": "https://x.example.com"}); rec.Code != http.StatusForbidden {
+	if rec := do(t, s, "POST", "/v1/teams/"+team.Ref+"/links", bobKey, map[string]any{"destination": "https://x.example.com"}); rec.Code != http.StatusForbidden {
 		t.Fatalf("non-member create team link = %d, want 403", rec.Code)
 	}
 	// alice lists the team's links
-	if rec := do(t, s, "GET", "/v1/teams/"+itoa(team.ID)+"/links", aliceKey, nil); rec.Code != http.StatusOK {
+	if rec := do(t, s, "GET", "/v1/teams/"+team.Ref+"/links", aliceKey, nil); rec.Code != http.StatusOK {
 		t.Fatalf("list team links = %d", rec.Code)
 	}
 	// bob cannot even see the team
-	if rec := do(t, s, "GET", "/v1/teams/"+itoa(team.ID), bobKey, nil); rec.Code != http.StatusNotFound {
+	if rec := do(t, s, "GET", "/v1/teams/"+team.Ref, bobKey, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("outsider get team = %d, want 404", rec.Code)
+	}
+	// a guessed or legacy numeric id is indistinguishable from a fake ref
+	for _, guessed := range []string{"1", "zzzzzzzzzz"} {
+		rec := do(t, s, "GET", "/v1/teams/"+guessed, bobKey, nil)
+		if rec.Code != http.StatusNotFound || strings.TrimSpace(rec.Body.String()) != `{"error":"team not found"}` {
+			t.Fatalf("guessed ref %q = %d, body %s, want 404 team not found", guessed, rec.Code, rec.Body.String())
+		}
 	}
 }
 

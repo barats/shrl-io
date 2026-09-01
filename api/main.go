@@ -153,8 +153,8 @@ func (s *server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /teams/{id}/links", s.listTeamLinks)
 	mux.HandleFunc("POST /teams/{id}/links", s.createTeamLink)
 	mux.HandleFunc("POST /teams/{id}/members", s.addTeamMember)
-	mux.HandleFunc("PATCH /teams/{id}/members/{userID}", s.setTeamMemberRole)
-	mux.HandleFunc("DELETE /teams/{id}/members/{userID}", s.removeTeamMember)
+	mux.HandleFunc("PATCH /teams/{id}/members/{username}", s.setTeamMemberRole)
+	mux.HandleFunc("DELETE /teams/{id}/members/{username}", s.removeTeamMember)
 	mux.HandleFunc("POST /teams/{id}/invites", s.createInvite)
 	mux.HandleFunc("GET /teams/{id}/invites", s.listInvites)
 	mux.HandleFunc("DELETE /teams/{id}/invites/{code}", s.revokeInvite)
@@ -266,6 +266,39 @@ func (s *server) writeServiceError(w http.ResponseWriter, err error) {
 	}
 }
 
+// linkJSON renders a Link with only opaque external identifiers (ADR 0021):
+// team_id is the team's Ref (null for Personal links) and created_by is the
+// creator's username.
+func (s *server) linkJSON(r *http.Request, l *domain.Link) map[string]any {
+	out := map[string]any{
+		"base_url":    l.BaseURL,
+		"code":        l.Code,
+		"destination": l.Destination,
+		"remark":      l.Remark,
+		"disabled":    l.Disabled,
+		"forward_utm": l.ForwardUTM,
+		"created_by":  s.usernameByID(r, l.CreatedBy),
+		"team_id":     nil,
+		"created_at":  l.CreatedAt,
+		"updated_at":  l.UpdatedAt,
+	}
+	if l.TeamID != nil {
+		if t, err := s.teams.Get(r.Context(), *l.TeamID); err == nil {
+			out["team_id"] = t.Ref
+		}
+	}
+	return out
+}
+
+// writeLinks renders a Link list with ids mapped per linkJSON.
+func (s *server) writeLinks(w http.ResponseWriter, r *http.Request, links []domain.Link) {
+	items := make([]map[string]any, 0, len(links))
+	for i := range links {
+		items = append(items, s.linkJSON(r, &links[i]))
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 // createLinkInScope validates the create-link request and persists the link,
 // scoped to a Team (teamID non-nil) or Personal (teamID nil).
 func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamID *int64) {
@@ -289,7 +322,7 @@ func (s *server) createLinkInScope(w http.ResponseWriter, r *http.Request, teamI
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, l)
+	writeJSON(w, http.StatusCreated, s.linkJSON(r, l))
 }
 
 func (s *server) createLink(w http.ResponseWriter, r *http.Request) {
@@ -302,7 +335,7 @@ func (s *server) getLink(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, l)
+	writeJSON(w, http.StatusOK, s.linkJSON(r, l))
 }
 
 func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
@@ -311,10 +344,7 @@ func (s *server) listLinks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list links")
 		return
 	}
-	if links == nil {
-		links = []domain.Link{}
-	}
-	writeJSON(w, http.StatusOK, links)
+	s.writeLinks(w, r, links)
 }
 
 func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
@@ -337,7 +367,7 @@ func (s *server) updateLink(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, l)
+	writeJSON(w, http.StatusOK, s.linkJSON(r, l))
 }
 
 func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
@@ -346,7 +376,7 @@ func (s *server) setDisabled(w http.ResponseWriter, r *http.Request, disabled bo
 		s.writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, l)
+	writeJSON(w, http.StatusOK, s.linkJSON(r, l))
 }
 
 func (s *server) disableLink(w http.ResponseWriter, r *http.Request) {

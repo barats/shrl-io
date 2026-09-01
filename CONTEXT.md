@@ -141,6 +141,13 @@ Link`s and their related data. Membership is many-to-many; a `User` may belong
 to several Teams.
 _Avoid_: group, workspace, organization
 
+**Ref**:
+The Team's opaque external identifier: a short random string that appears in
+Team URLs and API payloads instead of the Team's internal row number, so team
+existence and instance scale cannot be inferred from identifiers. Never
+chosen by a `User`; never reused after the `Team` is deleted.
+_Avoid_: team id, public id, slug
+
 **Team Link**:
 A `Link` that belongs to a `Team`, visible to every `Team Member` (read-only)
 and managed by its `Creator` or a `Team Owner`. The counterpart of a `Personal

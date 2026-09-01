@@ -30,7 +30,7 @@
 		UserPlus
 	} from '@lucide/svelte';
 
-	const teamId = $derived(Number(page.params.id));
+	const teamId = $derived(page.params.id ?? '');
 	const team = $derived(page.data.team);
 	const myRole = $derived(page.data.myRole);
 	const isAdmin = $derived(page.data.user?.isAdmin ?? false);
@@ -158,17 +158,17 @@
 		}
 	}
 
-	async function setRole(memberId: number, role: 'owner' | 'member') {
+	async function setRole(username: string, role: 'owner' | 'member') {
 		memberError = '';
 		try {
-			await api.setTeamMemberRole(teamId, memberId, role);
+			await api.setTeamMemberRole(teamId, username, role);
 			await invalidateAll();
 		} catch (e) {
 			memberError = (e as Error).message;
 		}
 	}
 
-	function removeMember(member: { id: number; username: string }) {
+	function removeMember(member: { username: string }) {
 		confirmRequest = {
 			title: `Remove ${member.username}?`,
 			description:
@@ -178,7 +178,7 @@
 			action: async () => {
 				memberError = '';
 				try {
-					await api.removeTeamMember(teamId, member.id);
+					await api.removeTeamMember(teamId, member.username);
 					await invalidateAll();
 				} catch (e) {
 					memberError = (e as Error).message;
@@ -189,14 +189,14 @@
 
 	function leave() {
 		if (!me) return;
-		const meId = me.id;
+		const meName = me.username;
 		confirmRequest = {
 			title: 'Leave this Team?',
 			description: 'Your Links stay with the Team. You can rejoin with a new invite code.',
 			confirmLabel: 'Leave',
 			action: async () => {
 				try {
-					await api.removeTeamMember(teamId, meId);
+					await api.removeTeamMember(teamId, meName);
 					await goto('/teams');
 				} catch (e) {
 					error = (e as Error).message;
@@ -314,7 +314,7 @@
 						</Alert>
 					{/if}
 					<ul class="divide-y">
-						{#each team?.members ?? [] as member (member.id)}
+						{#each team?.members ?? [] as member (member.username)}
 							<li class="flex items-center gap-3 py-3">
 								<span
 									class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
@@ -345,7 +345,7 @@
 											<Button
 												variant="outline"
 												size="sm"
-												onclick={() => setRole(member.id, 'member')}
+												onclick={() => setRole(member.username, 'member')}
 											>
 												Demote
 											</Button>
@@ -353,7 +353,7 @@
 											<Button
 												variant="outline"
 												size="sm"
-												onclick={() => setRole(member.id, 'owner')}
+												onclick={() => setRole(member.username, 'owner')}
 											>
 												Promote
 											</Button>
@@ -428,7 +428,7 @@
 							</div>
 						{:else}
 							<ul class="divide-y">
-								{#each invites as inv (inv.id)}
+								{#each invites as inv (inv.code)}
 									<li class="flex items-center justify-between gap-2 py-2.5">
 										<code
 											class="rounded bg-muted px-2 py-1 text-sm font-semibold tracking-wide"

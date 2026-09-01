@@ -22,13 +22,12 @@ func (s *server) getStats(w http.ResponseWriter, r *http.Request) {
 // getTeamStats returns aggregate analytics across a team's links, read-only
 // for members.
 func (s *server) getTeamStats(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
 	from, to := s.linkSvc.StatsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	st, err := s.linkSvc.GetTeamStats(r.Context(), currentUser(r), id, from, to)
+	st, err := s.linkSvc.GetTeamStats(r.Context(), currentUser(r), t.ID, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -39,13 +38,12 @@ func (s *server) getTeamStats(w http.ResponseWriter, r *http.Request) {
 // getTeamDashboard returns the full dashboard model across a team's links,
 // read-only for members.
 func (s *server) getTeamDashboard(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
 	from, to := s.linkSvc.StatsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
-	d, err := s.linkSvc.GetTeamDashboard(r.Context(), currentUser(r), id, from, to)
+	d, err := s.linkSvc.GetTeamDashboard(r.Context(), currentUser(r), t.ID, from, to)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -56,9 +54,8 @@ func (s *server) getTeamDashboard(w http.ResponseWriter, r *http.Request) {
 // getTeamStatsBreakdowns returns one dimension's full breakdown across a
 // team's links; the team dashboard "More" dialog's data source.
 func (s *server) getTeamStatsBreakdowns(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
 	dimension := r.URL.Query().Get("dimension")
@@ -72,7 +69,7 @@ func (s *server) getTeamStatsBreakdowns(w http.ResponseWriter, r *http.Request) 
 			limit = n
 		}
 	}
-	b, err := s.linkSvc.GetTeamStatsBreakdowns(r.Context(), currentUser(r), id, dimension, from, to, limit)
+	b, err := s.linkSvc.GetTeamStatsBreakdowns(r.Context(), currentUser(r), t.ID, dimension, from, to, limit)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return
@@ -83,9 +80,8 @@ func (s *server) getTeamStatsBreakdowns(w http.ResponseWriter, r *http.Request) 
 // getTeamTopLinks returns a team's links ranked within a window; the team
 // dashboard Top Links "More" dialog's data source.
 func (s *server) getTeamTopLinks(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid team id")
+	t, ok := s.teamByRef(w, r)
+	if !ok {
 		return
 	}
 	from, to := s.linkSvc.StatsWindow(r.URL.Query().Get("from"), r.URL.Query().Get("to"), time.Now().UTC())
@@ -96,7 +92,7 @@ func (s *server) getTeamTopLinks(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	links, err := s.linkSvc.GetTeamTopLinks(r.Context(), currentUser(r), id, from, to, byVisits, limit)
+	links, err := s.linkSvc.GetTeamTopLinks(r.Context(), currentUser(r), t.ID, from, to, byVisits, limit)
 	if err != nil {
 		s.writeServiceError(w, err)
 		return

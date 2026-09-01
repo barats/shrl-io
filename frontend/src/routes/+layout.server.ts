@@ -25,7 +25,7 @@ export async function load({ request, url }) {
 	}
 	// The username quick-switch menu lists the caller's joined teams, so the
 	// root layout carries them for both the personal and team navbars.
-	let teams: { id: number; name: string; role: string }[] = [];
+	let teams: { id: string; name: string; role: string }[] = [];
 	if (session) {
 		try {
 			const res = await apiFetch('teams', {
