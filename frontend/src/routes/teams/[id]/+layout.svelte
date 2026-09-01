@@ -19,7 +19,6 @@
 	const nav = $derived([
 		{ href: `/teams/${teamId}`, label: 'Overview', active: isActive(`/teams/${teamId}`) },
 		{ href: `/teams/${teamId}/links`, label: 'Links', active: isActive(`/teams/${teamId}/links`) },
-		{ href: `/teams/${teamId}/members`, label: 'Members', active: isActive(`/teams/${teamId}/members`) },
 		{ href: `/teams/${teamId}/settings`, label: 'Settings', active: isActive(`/teams/${teamId}/settings`) }
 	]);
 </script>

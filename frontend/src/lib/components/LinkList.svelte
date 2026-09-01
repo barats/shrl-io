@@ -18,13 +18,15 @@
 		loading,
 		error = '',
 		hrefPrefix,
-		searchable = true
+		searchable = true,
+		emptyHint = 'Shorten a Destination under one of the registered Base URLs with the Create Link button above.'
 	}: {
 		links: Link[];
 		loading: boolean;
 		error?: string;
 		hrefPrefix: string;
 		searchable?: boolean;
+		emptyHint?: string;
 	} = $props();
 
 	let query = $state('');
@@ -105,10 +107,7 @@
 			<CardContent class="flex flex-col items-center gap-3 py-10 text-center">
 				<Link2 class="size-8 text-muted-foreground" />
 				<h2 class="text-lg font-semibold">No Links yet</h2>
-				<p class="max-w-xs text-sm text-muted-foreground">
-					Shorten a Destination under one of the registered Base URLs with the
-					Create Link button above.
-				</p>
+				<p class="max-w-xs text-sm text-muted-foreground">{emptyHint}</p>
 			</CardContent>
 		</Card>
 	{:else}
