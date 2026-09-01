@@ -60,7 +60,7 @@ The production build is a Node server via `adapter-node`; the included
 ## Project structure
 
 - `src/routes/` — pages and server routes: `/` (Links), `links/[code]`
-  (Link detail), `login`, `account`, `settings`, `teams` and `teams/[id]`
+  (Link detail), `login`, `profile`, `settings`, `teams` and `teams/[id]`
 - `src/lib/api.ts` — the typed client for the proxied Internal API
 - `src/lib/server/` — session cookie handling and server-side API proxy
 - `src/lib/components/` — shared components (charts, QR code, UI kit)

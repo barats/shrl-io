@@ -74,7 +74,7 @@
 	const sections = [
 		{ id: 'code-generation', label: 'Code generation' },
 		{ id: 'base-urls', label: 'Base URLs' },
-		{ id: 'accounts', label: 'Accounts' }
+		{ id: 'users', label: 'Users' }
 	];
 	let secretCopied = $state('');
 
@@ -250,7 +250,7 @@
 
 <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 <p class="mt-1 text-sm text-muted-foreground">
-	Instance administration: Code length, Base URLs, and accounts. Teams live on the
+	Instance administration: Code length, Base URLs, and users. Teams live on the
 	Teams page.
 </p>
 
@@ -391,10 +391,10 @@
 			</Card>
 		</section>
 
-		<section id="accounts" class="scroll-mt-8">
+		<section id="users" class="scroll-mt-8">
 			<Card>
 				<CardHeader>
-					<CardTitle>Accounts</CardTitle>
+					<CardTitle>Users</CardTitle>
 					<CardDescription>
 						Users sign in and manage their own Links. Deleting a user removes their Personal
 						Links and memberships; Team Links they created stay with the Team.
@@ -443,7 +443,7 @@
 					{#if uError}
 						<Alert variant="destructive" class="mb-4">
 							<TriangleAlert class="size-4" />
-							<AlertTitle>Could not load accounts</AlertTitle>
+							<AlertTitle>Could not load users</AlertTitle>
 							<AlertDescription>{uError}</AlertDescription>
 						</Alert>
 					{:else if uLoading}
@@ -483,7 +483,7 @@
 													size="icon-sm"
 													title={
 														user.id === me?.id
-															? 'You cannot reset your own password here. Use the Account page.'
+															? 'You cannot reset your own password here. Use the Profile page.'
 															: 'Reset password'
 													}
 													disabled={user.id === me?.id || confirmRequest !== null}
@@ -513,10 +513,10 @@
 			</Card>
 		</section>
 
-		<section id="create-account" class="scroll-mt-8">
+		<section id="create-user" class="scroll-mt-8">
 			<Card>
 				<CardHeader>
-					<CardTitle>Create account</CardTitle>
+					<CardTitle>Create user</CardTitle>
 					<CardDescription>
 						Leave the password blank to generate one, shown only once.
 					</CardDescription>
@@ -525,7 +525,7 @@
 					{#if userCreateError}
 						<Alert variant="destructive" class="mb-4">
 							<TriangleAlert class="size-4" />
-							<AlertTitle>Could not create account</AlertTitle>
+							<AlertTitle>Could not create user</AlertTitle>
 							<AlertDescription>{userCreateError}</AlertDescription>
 						</Alert>
 					{/if}
@@ -539,7 +539,7 @@
 										<KeyRound class="size-4" />
 									</div>
 									<div>
-										<p class="text-sm font-medium">Account created</p>
+										<p class="text-sm font-medium">User created</p>
 										<p class="mt-0.5 text-sm text-muted-foreground">
 											This password is shown once. Share it with the user.
 										</p>
@@ -587,7 +587,7 @@
 							Admin
 						</label>
 						<Button type="submit" disabled={creatingUser}>
-							<UserPlus class="size-4" /> Create account
+							<UserPlus class="size-4" /> Create user
 						</Button>
 					</form>
 				</CardContent>

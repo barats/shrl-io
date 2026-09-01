@@ -45,21 +45,21 @@ func TestChangePassword(t *testing.T) {
 	tok := loginAs(t, s, "alice", "correct-horse")
 
 	// wrong current password is rejected
-	if rec := do(t, s, "POST", "/account/password", tok, map[string]any{
+	if rec := do(t, s, "POST", "/profile/password", tok, map[string]any{
 		"current_password": "wrong",
 		"new_password":     "new-secret-123",
 	}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong current = %d, want 401", rec.Code)
 	}
 	// a too-short new password is rejected
-	if rec := do(t, s, "POST", "/account/password", tok, map[string]any{
+	if rec := do(t, s, "POST", "/profile/password", tok, map[string]any{
 		"current_password": "correct-horse",
 		"new_password":     "short",
 	}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("short new = %d, want 400", rec.Code)
 	}
 	// success keeps the current session alive
-	if rec := do(t, s, "POST", "/account/password", tok, map[string]any{
+	if rec := do(t, s, "POST", "/profile/password", tok, map[string]any{
 		"current_password": "correct-horse",
 		"new_password":     "new-secret-123",
 	}); rec.Code != http.StatusNoContent {
@@ -96,7 +96,7 @@ func TestChangePasswordRevokesOtherCredentials(t *testing.T) {
 		t.Fatalf("me key before = %d", rec.Code)
 	}
 
-	if rec := do(t, s, "POST", "/account/password", tok1, map[string]any{
+	if rec := do(t, s, "POST", "/profile/password", tok1, map[string]any{
 		"current_password": "correct-horse",
 		"new_password":     "new-secret-123",
 	}); rec.Code != http.StatusNoContent {
@@ -205,7 +205,7 @@ func TestAdminResetForcesPasswordChange(t *testing.T) {
 	}
 
 	// changing the password lifts the gate
-	if rec := do(t, s, "POST", "/account/password", tempTok, map[string]any{
+	if rec := do(t, s, "POST", "/profile/password", tempTok, map[string]any{
 		"current_password": resetOut.Password,
 		"new_password":     "brand-new-pass-123",
 	}); rec.Code != http.StatusNoContent {

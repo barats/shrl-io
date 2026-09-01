@@ -157,11 +157,11 @@
 </script>
 
 <svelte:head>
-	<title>Account - shrl.io</title>
+	<title>Profile - shrl.io</title>
 </svelte:head>
 
 <div class="max-w-6xl">
-	<h1 class="text-2xl font-semibold tracking-tight">Account</h1>
+	<h1 class="text-2xl font-semibold tracking-tight">Profile</h1>
 	<p class="mt-1 text-sm text-muted-foreground">
 		Your password and API keys for programmatic access.
 	</p>
@@ -186,7 +186,7 @@
 	{/if}
 
 	<div class="mt-6 grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
-		<SectionNav {sections} label="Account sections" />
+		<SectionNav {sections} label="Profile sections" />
 
 		<div class="min-w-0 max-w-3xl space-y-6">
 			<section id="password" class="scroll-mt-8">

@@ -85,21 +85,21 @@ teams and individuals who want full control over their link data.
 - **Optional GeoIP**: set `SHRL_GEOLITE_LICENSE` (a free MaxMind account) to
   attribute country/region/city; without it, locations report as `unknown`.
 
-### Admin UI & accounts
+### Admin UI & users
 
-- **Accounts**: password-based Users with bcrypt hashes; the first account is
+- **Users**: password-based accounts with bcrypt hashes; the first user is
   an **Admin** provisioned on first run with a random password shown once in
   the api logs (`SHRL_ADMIN_PASSWORD` sets a known one). Admins create
   accounts; there is no self-registration.
 - **Login**: sign in with username + password; the UI issues an HttpOnly
   session cookie and proxies API calls server-side with the user's token, so
   the password and token never reach the browser.
-- **Change password**: a User replaces their own password on the Account
+- **Change password**: a User replaces their own password on the Profile
   page; doing so revokes every other sign-in and every API key, keeping only
   the current session.
 - **API keys**: long-lived, named bearer credentials for the public **Auth
   API** — scripts and CI authenticate with them instead of a session. Created
-  and revoked per User on the Account page, shown once at creation, and
+  and revoked per User on the Profile page, shown once at creation, and
   revoked on a password change.
 - **Admin password reset**: an Admin resets a forgotten password to a
   generated temporary one (shown once); the User must change it on their next
@@ -125,7 +125,7 @@ teams and individuals who want full control over their link data.
 ### Settings (admin)
 
 - **Base URLs**: register and remove Base URLs in the Registry.
-- **Accounts**: create and delete Users; deleting a User removes their
+- **Users**: create and delete accounts; deleting a User removes their
   Personal Links and memberships — Team Links they created stay with the Team.
 - **Teams**: create and delete Teams; deleting a Team reverts its Links to
   Personal.
@@ -235,7 +235,7 @@ The Internal API is not published to the host (frontend-only, ADR 0015).
 ### Create a Link
 
 Scripts and CI use the public **Auth API** with an **API key**. Create a key
-on the Account page of the UI (it is shown once), then:
+on the Profile page of the UI (it is shown once), then:
 
     curl -X POST http://localhost:8083/v1/links \
       -H "Authorization: Bearer <your-api-key>" \
@@ -450,7 +450,7 @@ not exposed. Requests are rate-limited per IP and per key (see the Auth API
 There is no delete endpoint on the Auth API (ADR 0016). Links are managed
 with the same permissions as in the UI: a Team Member reads Team Links; the
 Creator (while a member) or a Team Owner manages them. Keys are created and
-revoked on the Account page of the UI.
+revoked on the Profile page of the UI.
 
 ## Terminology
 

@@ -162,7 +162,7 @@ func (s *server) routes() *http.ServeMux {
 	mux.HandleFunc("DELETE /teams/{id}", s.deleteTeam)
 	mux.HandleFunc("DELETE /users/{id}", s.deleteUser)
 	mux.HandleFunc("POST /users/{id}/reset", s.resetUserPassword)
-	mux.HandleFunc("POST /account/password", s.changePassword)
+	mux.HandleFunc("POST /profile/password", s.changePassword)
 	mux.HandleFunc("POST /keys", s.createKey)
 	mux.HandleFunc("GET /keys", s.listKeys)
 	mux.HandleFunc("DELETE /keys/{id}", s.deleteKey)

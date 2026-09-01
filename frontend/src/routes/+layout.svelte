@@ -19,7 +19,7 @@
 		{ href: '/', label: 'Dashboard', active: path === '/' },
 		{ href: '/links', label: 'Links', active: path.startsWith('/links') },
 		{ href: '/teams', label: 'Teams', active: path.startsWith('/teams') },
-		{ href: '/account', label: 'Account', active: path.startsWith('/account') },
+		{ href: '/profile', label: 'Profile', active: path.startsWith('/profile') },
 		...(data?.user?.isAdmin
 			? [{ href: '/settings', label: 'Settings', active: path.startsWith('/settings') }]
 			: [])

@@ -207,3 +207,9 @@ Login and carried as an HttpOnly cookie; the UI's server holds the User's
 `Token` and proxies API calls on their behalf. Distinct from the API's
 per-request `Token` auth.
 _Avoid_: login state
+
+**Profile**:
+The page in the UI where a signed-in `User` changes their `Password` and
+manages their `API Key`s. A UI surface, not an entity: the thing behind it
+remains a `User`.
+_Avoid_: Account page, account settings, user settings

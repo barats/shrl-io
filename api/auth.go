@@ -84,7 +84,7 @@ func (s *server) auth(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		if u.MustChangePassword && r.URL.Path != "/account/password" && r.URL.Path != "/me" {
+		if u.MustChangePassword && r.URL.Path != "/profile/password" && r.URL.Path != "/me" {
 			writeError(w, http.StatusForbidden, "password change required")
 			return
 		}

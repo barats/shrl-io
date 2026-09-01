@@ -6,7 +6,7 @@ export async function load({ request, url }) {
 	const session = readSession(request.headers.get('cookie'));
 	// A user on a temporary password from an admin reset may only change their
 	// password until it is replaced (ADR 0012). The session flag can go stale
-	// the moment the user changes their password from /account, so when it is
+	// the moment the user changes their password from /profile, so when it is
 	// set we refresh against the backend, which is the source of truth.
 	let mustChangePassword = session?.mustChangePassword === true;
 	if (mustChangePassword && session) {
@@ -20,8 +20,8 @@ export async function load({ request, url }) {
 			/* backend unreachable: fall back to the session flag */
 		}
 	}
-	if (mustChangePassword && url.pathname !== '/account') {
-		throw redirect(303, '/account');
+	if (mustChangePassword && url.pathname !== '/profile') {
+		throw redirect(303, '/profile');
 	}
 	// The username quick-switch menu lists the caller's joined teams, so the
 	// root layout carries them for both the personal and team navbars.

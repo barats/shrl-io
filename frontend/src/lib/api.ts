@@ -33,7 +33,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 		}
 		if (typeof window !== 'undefined' && res.status === 403 && msg === 'password change required') {
 			// A temp-password user can only change their password until they do.
-			window.location.assign('/account');
+			window.location.assign('/profile');
 		}
 		throw new Error(msg);
 	}
@@ -344,10 +344,10 @@ export const api = {
 		});
 	},
 
-	// --- Account ---
+	// --- Profile ---
 
 	async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-		return req('account/password', {
+		return req('profile/password', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
