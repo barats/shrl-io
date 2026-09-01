@@ -77,7 +77,10 @@ teams and individuals who want full control over their link data.
 - **Read API**: lifetime and window totals, daily time series, and top-N
   breakdowns per dimension.
 - **Dimensions**: `referrer`, `device`, `os`, `browser`, `country`, `region`,
-  `city`.
+  `city`, and the six `utm_*` parameters.
+- **Geographic map**: a country map view of visits on the dashboard, team
+  dashboard, and each Link's detail page, with a top-countries list (data
+  requires GeoIP attribution).
 - **Bot filtering**: known crawlers and link-preview unfurlers are excluded at
   aggregation time.
 - **Retention pruning**: daily rollups are pruned after `SHRL_RETENTION_DAYS`
@@ -201,13 +204,6 @@ teams and individuals who want full control over their link data.
 3. **Aggregate**: the worker consumes the stream in batches and upserts daily,
    lifetime, and breakdown rollups into PostgreSQL in a single transaction;
    stale rollups are pruned after the retention window.
-
-## Roadmap
-
-Planned, not yet built:
-
-- **Geographic maps**: country/region map views in the admin analytics screen
-  (the base dashboard UI now ships with charts)
 
 ## Development
 
@@ -442,10 +438,12 @@ not exposed. Requests are rate-limited per IP and per key (see the Auth API
 | GET    | `/v1/links/{code}/analytics`           | Lifetime and window visit totals                    |
 | GET    | `/v1/links/{code}/analytics/timeseries` | Daily visit buckets in the window, ascending      |
 | GET    | `/v1/links/{code}/analytics/breakdowns` | Top-N dimension values in the window              |
+| GET    | `/v1/stats`                            | Dashboard totals and daily timeseries for the caller's Personal Links |
 | GET    | `/v1/teams`                            | List the caller's Teams (with their role)          |
 | GET    | `/v1/teams/{id}`                       | Team details (members and admins)                   |
 | GET    | `/v1/teams/{id}/links`                 | The Team's Links, read-only for members             |
 | POST   | `/v1/teams/{id}/links`                 | Create a Link in the Team (members)                 |
+| GET    | `/v1/teams/{id}/stats`                 | Dashboard totals and daily timeseries for the Team's Links (read-only for members) |
 
 There is no delete endpoint on the Auth API (ADR 0016). Links are managed
 with the same permissions as in the UI: a Team Member reads Team Links; the
