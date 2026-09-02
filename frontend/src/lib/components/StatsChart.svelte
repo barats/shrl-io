@@ -64,6 +64,8 @@
 				options: {
 					responsive: true,
 					maintainAspectRatio: false,
+					// Render chart text in the app font, not Chart.js's default.
+					font: { family: getComputedStyle(document.documentElement).fontFamily },
 					interaction: { mode: 'index', intersect: false },
 					plugins: {
 						legend: { display: false },
@@ -108,14 +110,20 @@
 		chart = null;
 	});
 
-	// Re-resolve the token colors when the theme flips (light/dark toggle or
+	// Re-resolve every themed color when the theme flips (light/dark toggle or
 	// OS change), so an open chart keeps matching the active palette. The
-	// `dark` class on <html> has already swapped the CSS variables.
+	// `dark` class on <html> has already swapped the CSS variables. Tick and
+	// grid colors are frozen at construction unless refreshed here too.
 	$effect(() => {
 		themeState.effectiveDark;
 		if (!chart) return;
 		chart.data.datasets[0].backgroundColor = themeColor('--primary', 0.85);
 		chart.data.datasets[1].backgroundColor = themeColor('--muted-foreground', 0.45);
+		const tickColor = themeColor('--muted-foreground', 0.8);
+		const gridColor = themeColor('--border', 0.5);
+		if (chart.options.scales?.x?.ticks) chart.options.scales.x.ticks.color = tickColor;
+		if (chart.options.scales?.y?.ticks) chart.options.scales.y.ticks.color = tickColor;
+		if (chart.options.scales?.y?.grid) chart.options.scales.y.grid.color = gridColor;
 		chart.update();
 	});
 </script>

@@ -134,7 +134,7 @@
 			<div class="my-1 h-px bg-border"></div>
 			<button
 				type="button"
-				class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-red-600 hover:bg-muted"
+				class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive hover:bg-muted"
 				role="menuitem"
 				onclick={logout}
 			>

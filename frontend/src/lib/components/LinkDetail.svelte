@@ -624,7 +624,7 @@
 						</Button>
 						<div class="flex items-center gap-3">
 							{#if saved}
-								<p class="text-sm text-green-600">Link saved.</p>
+								<p class="text-sm text-success">Link saved.</p>
 							{/if}
 							<Button type="submit" disabled={saving}>
 								<Save class="size-4" /> {saving ? 'Saving…' : 'Save'}

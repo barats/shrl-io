@@ -183,7 +183,7 @@
 										title="Copy short URL"
 									>
 										{#if copiedCode === link.code}
-											<Check class="size-4 text-green-600" />
+											<Check class="size-4 text-success" />
 										{:else}
 											<Copy class="size-4" />
 										{/if}
