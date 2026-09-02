@@ -726,7 +726,6 @@
 					items={sourceItems}
 					metric="visits"
 					showVisitors={false}
-					empty="No visits in this period."
 					onMore={() => openDialog('sources')}
 				/>
 				<RankCard
@@ -737,7 +736,6 @@
 					onTabChange={changeEnvTab}
 					metric="visits"
 					showVisitors={false}
-					empty="No visits in this period."
 					onMore={() => openDialog('environment')}
 				/>
 			</div>
@@ -750,7 +748,6 @@
 					onTabChange={changeLocTab}
 					metric="visits"
 					showVisitors={false}
-					empty="No visits in this period."
 					valueFormatter={(v) => (locTab === 'country' ? countryLabel(v) : v)}
 					onMore={() => openDialog('location')}
 				/>
@@ -766,7 +763,6 @@
 					onTabChange={changeCampaignTab}
 					metric="visits"
 					showVisitors={false}
-					empty="No visits in this period."
 					onMore={() => openDialog('campaigns')}
 				/>
 			</div>

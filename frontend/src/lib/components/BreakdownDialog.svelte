@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import VisitsEmptyState from '$lib/components/VisitsEmptyState.svelte';
 	import type { DashboardBreakdownItem } from '$lib/types';
 	import { ChevronLeft, ChevronRight, Menu, X } from '@lucide/svelte';
 
@@ -292,9 +293,7 @@
 					{:else if error}
 						<p class="py-4 text-center text-sm text-destructive">{error}</p>
 					{:else if items.length === 0}
-						<p class="py-4 text-center text-sm text-muted-foreground">
-							No visits in this period.
-						</p>
+						<VisitsEmptyState compact />
 					{:else}
 						<div class="rounded-md border">
 							<div
@@ -320,11 +319,15 @@
 									></div>
 									<span class="relative truncate text-sm font-medium">
 										{#if hrefs[item.value]}
-											<a href={hrefs[item.value]} class="text-link hover:underline">
-												{display(item.value)}
+											<a
+												href={hrefs[item.value]}
+												class="text-link hover:underline {item.label ? 'font-mono text-[13px]' : ''}"
+												title={item.label ? item.value : undefined}
+											>
+												{item.label ?? display(item.value)}
 											</a>
 										{:else}
-											{display(item.value)}
+											{item.label ?? display(item.value)}
 										{/if}
 									</span>
 									<span class="relative min-w-14 text-right text-sm tabular-nums">

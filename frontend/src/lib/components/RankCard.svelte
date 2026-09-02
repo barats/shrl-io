@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import VisitsEmptyState from '$lib/components/VisitsEmptyState.svelte';
 	import type { DashboardBreakdownItem } from '$lib/types';
 
 	// Number of rows a card shows before the "More" button takes over.
@@ -8,7 +9,6 @@
 	let {
 		title,
 		items,
-		empty = 'No visits in this period.',
 		tabs = [],
 		active,
 		onTabChange,
@@ -21,7 +21,6 @@
 	}: {
 		title: string;
 		items: DashboardBreakdownItem[];
-		empty?: string;
 		// A tab is either a plain id (rendered as its own label) or an
 		// id/label pair for display names that differ from the id.
 		tabs?: Array<string | { id: string; label: string }>;
@@ -73,7 +72,7 @@
 	<CardContent class="flex flex-1 flex-col">
 		<div class="min-h-[300px] flex-1">
 			{#if items.length === 0}
-				<p class="py-4 text-center text-sm text-muted-foreground">{empty}</p>
+				<VisitsEmptyState compact />
 			{:else}
 				<div class="space-y-3">
 					{#each shown as item, i (item.value)}
@@ -87,11 +86,15 @@
 									{/if}
 									<span class="truncate font-medium">
 										{#if hrefs[item.value]}
-											<a href={hrefs[item.value]} class="text-link hover:underline">
-												{display(item.value)}
+											<a
+												href={hrefs[item.value]}
+												class="text-link hover:underline {item.label ? 'font-mono text-[13px]' : ''}"
+												title={item.label ? item.value : undefined}
+											>
+												{item.label ?? display(item.value)}
 											</a>
 										{:else}
-											{display(item.value)}
+											{item.label ?? display(item.value)}
 										{/if}
 									</span>
 								</span>

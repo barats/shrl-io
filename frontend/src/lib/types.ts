@@ -111,6 +111,9 @@ export interface DashboardBreakdownItem {
 	value: string;
 	visits: number;
 	unique_visitors: number;
+	// Optional display label when `value` is a technical key (e.g. a Link's
+	// full short URL shown as just its Code).
+	label?: string;
 }
 
 // A dimension group keyed by sub-tab, e.g. environment.browser.

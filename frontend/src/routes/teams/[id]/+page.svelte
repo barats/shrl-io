@@ -95,6 +95,7 @@
 	function topItems(links: DashboardTopLink[]): DashboardBreakdownItem[] {
 		return links.map((l) => ({
 			value: `${l.base_url}/${l.code}`,
+			label: l.code,
 			visits: l.visits,
 			unique_visitors: l.unique_visitors
 		}));
@@ -222,9 +223,31 @@
 			</CardContent>
 		</Card>
 	{:else if data}
-		<!-- Row 1: stats cards. Total/Active/Disabled are current state and
-		     ignore the range; Visits/Visitors are range-scoped. -->
+		<!-- Row 1: stats cards. Visits/Visitors are range-scoped and lead the
+		     row; Total/Active/Disabled are current state and ignore the range.
+		     Visits spans both mobile columns so no card is orphaned. -->
 		<div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+			<Card class="col-span-2 xl:col-span-1">
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-foreground/70">Visits</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{visitsCard}</p>
+					<p class="text-xs text-foreground/70">{presetLabel(range.preset)}</p>
+					{#if data.timeseries.length > 1}
+						<Sparkline rows={data.timeseries} class="mt-3 h-6 w-full text-primary" />
+					{/if}
+				</CardContent>
+			</Card>
+			<Card>
+				<CardHeader class="pb-2">
+					<CardTitle class="text-sm font-medium text-muted-foreground">Visitors</CardTitle>
+				</CardHeader>
+				<CardContent class="pt-0">
+					<p class="text-2xl font-semibold">{data.window_uniques}</p>
+					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
+				</CardContent>
+			</Card>
 			<Card>
 				<CardHeader class="pb-2">
 					<CardTitle class="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
@@ -247,27 +270,6 @@
 				</CardHeader>
 				<CardContent class="pt-0">
 					<p class="text-2xl font-semibold">{data.disabled_links}</p>
-				</CardContent>
-			</Card>
-			<Card class="bg-primary/5">
-				<CardHeader class="pb-2">
-					<CardTitle class="text-sm font-medium text-foreground/70">Visits</CardTitle>
-				</CardHeader>
-				<CardContent class="pt-0">
-					<p class="text-2xl font-semibold">{visitsCard}</p>
-					<p class="text-xs text-foreground/70">{presetLabel(range.preset)}</p>
-					{#if data.timeseries.length > 1}
-						<Sparkline rows={data.timeseries} class="mt-3 h-6 w-full text-primary" />
-					{/if}
-				</CardContent>
-			</Card>
-			<Card>
-				<CardHeader class="pb-2">
-					<CardTitle class="text-sm font-medium text-muted-foreground">Visitors</CardTitle>
-				</CardHeader>
-				<CardContent class="pt-0">
-					<p class="text-2xl font-semibold">{data.window_uniques}</p>
-					<p class="text-xs text-muted-foreground">{presetLabel(range.preset)}</p>
 				</CardContent>
 			</Card>
 		</div>

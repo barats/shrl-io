@@ -374,6 +374,7 @@
 									placeholder="e.g. ci"
 									bind:value={newKeyName}
 									class="flex-1"
+								name="new-key-name"
 									aria-label="New key name"
 									maxlength={64}
 									required

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/state';
+	import { Button } from '$lib/components/ui/button';
 </script>
 
 <svelte:head>
@@ -23,5 +24,8 @@
 				{page.error?.message ?? 'An unexpected error occurred.'}
 			</p>
 		{/if}
+		<div class="mt-6">
+			<Button href="/" variant="outline">Back to Dashboard</Button>
+		</div>
 	</div>
 </div>

@@ -381,6 +381,7 @@
 							placeholder="https://example.com"
 							bind:value={newBaseURL}
 							class="flex-1"
+							name="new-base-url"
 							aria-label="New base URL"
 							required
 						/>

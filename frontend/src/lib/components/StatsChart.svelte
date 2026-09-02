@@ -11,6 +11,7 @@
 	} from 'chart.js';
 	import type { TimeseriesRow } from '$lib/types';
 	import { themeState } from '$lib/theme.svelte';
+	import VisitsEmptyState from '$lib/components/VisitsEmptyState.svelte';
 
 	Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -129,7 +130,7 @@
 </script>
 
 {#if rows.length === 0}
-	<p class="text-sm text-muted-foreground">No visits in this period yet.</p>
+	<VisitsEmptyState compact />
 {:else}
 	<div class="space-y-3">
 		<div class="flex items-center gap-4 text-xs text-muted-foreground">

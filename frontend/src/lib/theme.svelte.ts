@@ -47,6 +47,10 @@ export function setTheme(t: Theme) {
 	apply();
 }
 
-export function toggleTheme() {
-	setTheme(themeState.effectiveDark ? 'light' : 'dark');
+// Cycle light -> dark -> system. 'system' follows the OS again; the OS
+// change listener above keeps applying it live.
+export function cycleTheme() {
+	const next: Theme =
+		themeState.theme === 'light' ? 'dark' : themeState.theme === 'dark' ? 'system' : 'light';
+	setTheme(next);
 }
