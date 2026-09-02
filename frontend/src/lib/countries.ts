@@ -253,8 +253,11 @@ export const COUNTRY_NAMES: Record<string, string> = {
 	ZW: 'Zimbabwe'
 };
 
-// countryFlag derives the flag emoji from the ISO code.
+// countryFlag derives the flag emoji from the ISO code. Anything that is not
+// a two-letter code (e.g. "unknown") gets no flag: its letters would render
+// as unrelated junk flags.
 export function countryFlag(code: string): string {
+	if (!/^[A-Za-z]{2}$/.test(code)) return '';
 	return code
 		.toUpperCase()
 		.replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
@@ -263,5 +266,6 @@ export function countryFlag(code: string): string {
 // countryLabel returns "Name Flag" for a known code, falling back to the code.
 export function countryLabel(code: string): string {
 	const name = COUNTRY_NAMES[code.toUpperCase()] ?? code;
-	return `${name} ${countryFlag(code)}`;
+	const flag = countryFlag(code);
+	return flag ? `${name} ${flag}` : name;
 }

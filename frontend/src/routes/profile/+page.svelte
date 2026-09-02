@@ -357,6 +357,7 @@
 														variant="ghost"
 														size="icon-sm"
 														title="Revoke key"
+														aria-label="Revoke key"
 														disabled={confirmRequest !== null}
 														onclick={() => revokeKey(key.id)}
 													>

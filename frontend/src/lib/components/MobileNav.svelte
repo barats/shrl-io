@@ -15,8 +15,10 @@
 
 	$effect(() => {
 		if (!open) return;
+		// composedPath, not contains: the open toggle swaps the trigger's Menu/X
+		// icons, detaching the clicked icon node mid-dispatch, which breaks contains.
 		function onOutside(e: MouseEvent) {
-			if (rootEl && !rootEl.contains(e.target as Node)) open = false;
+			if (rootEl && !e.composedPath().includes(rootEl)) open = false;
 		}
 		function onKey(e: KeyboardEvent) {
 			if (e.key === 'Escape') open = false;
@@ -48,7 +50,7 @@
 
 	{#if open}
 		<div
-			class="absolute right-0 z-50 mt-1 w-52 rounded-md border bg-card p-1 text-sm shadow-md"
+			class="absolute left-0 z-50 mt-1 w-52 rounded-md border bg-card p-1 text-sm shadow-md"
 			role="menu"
 		>
 			{#each items as item (item.href)}

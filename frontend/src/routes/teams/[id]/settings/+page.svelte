@@ -362,6 +362,7 @@
 											variant="ghost"
 											size="icon-sm"
 											title="Remove member"
+											aria-label="Remove member"
 											disabled={confirmRequest !== null}
 											onclick={() => removeMember(member)}
 										>
@@ -444,6 +445,7 @@
 												variant="ghost"
 												size="icon-sm"
 												title="Revoke code"
+												aria-label="Revoke code"
 												disabled={confirmRequest !== null}
 												onclick={() => revokeInvite(inv.code)}
 											>

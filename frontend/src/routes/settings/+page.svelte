@@ -360,6 +360,7 @@
 										variant="ghost"
 										size="sm"
 										title="Remove base URL"
+										aria-label="Remove base URL"
 										disabled={confirmRequest !== null}
 										onclick={() => removeBaseURL(url)}
 									>
@@ -486,6 +487,7 @@
 															? 'You cannot reset your own password here. Use the Profile page.'
 															: 'Reset password'
 													}
+													aria-label="Reset password"
 													disabled={user.id === me?.id || confirmRequest !== null}
 													onclick={() => resetPassword(user)}
 												>
@@ -497,6 +499,7 @@
 													title={user.id === me?.id
 														? 'You cannot delete your own account'
 														: 'Delete user'}
+													aria-label="Delete user"
 													disabled={user.id === me?.id || confirmRequest !== null}
 													onclick={() => deleteUser(user)}
 												>
