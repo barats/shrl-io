@@ -11,6 +11,8 @@
 <div align="center">
 
 [![CI](https://github.com/barats/shrl-io/actions/workflows/ci.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/ci.yml)
+[![Release](https://github.com/barats/shrl-io/actions/workflows/release.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/barats/shrl-io)](https://github.com/barats/shrl-io/releases/latest)
 
 </div>
 
