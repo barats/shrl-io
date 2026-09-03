@@ -9,6 +9,8 @@ export interface Link {
 	team_id: string | null;
 	created_at: string;
 	updated_at: string;
+	// All-time visit total; present on list responses, absent on single-link reads.
+	visits?: number;
 }
 
 export type TeamRole = 'owner' | 'member';

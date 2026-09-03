@@ -144,6 +144,21 @@ func TestAnalyticsStoreAggregatesAcrossCodes(t *testing.T) {
 		t.Fatalf("lifetime total = %d, %v (want 111)", total, err)
 	}
 
+	// per-code all-time totals; a code with no lifetime row is absent
+	lt, err := s.LifetimeTotals(ctx, []string{"abc", "other", "missing"})
+	if err != nil {
+		t.Fatalf("lifetime totals: %v", err)
+	}
+	if lt["abc"] != 12 || lt["other"] != 99 || len(lt) != 2 {
+		t.Fatalf("lifetime totals = %+v (want abc 12, other 99)", lt)
+	}
+
+	// an empty code set returns an empty map without querying
+	none, err := s.LifetimeTotals(ctx, nil)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("empty codes lifetime totals = %+v, %v", none, err)
+	}
+
 	// timeseries grouped by day across both codes, ascending
 	rows, err := s.GetTimeseriesForCodes(ctx, []string{"abc", "other"}, day1, day2)
 	if err != nil || len(rows) != 2 {

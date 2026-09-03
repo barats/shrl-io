@@ -8,6 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Check, Copy, Link2, Search, TriangleAlert } from '@lucide/svelte';
+	import { relativeDate } from '$lib/utils';
 
 	// The shared management list for both Personal and Team Links. The pages
 	// own the data loading and the create flow; this component owns the
@@ -52,23 +53,6 @@
 				})
 	);
 
-	// Relative date computed in UTC to match created_at's sliced date portion
-	// (a UTC timestamp rendered without a timezone shift).
-	function relativeDate(iso: string): string {
-		const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-		if (!y || !m || !d) return iso.slice(0, 10);
-		const now = new Date();
-		const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-		const day = Date.UTC(y, m - 1, d);
-		const days = Math.round((today - day) / 86_400_000);
-		if (days <= 0) return 'Today';
-		if (days === 1) return 'Yesterday';
-		if (days < 7) return `${days}d`;
-		if (days < 30) return `${Math.floor(days / 7)}w`;
-		if (days < 365) return `${Math.floor(days / 30)}mo`;
-		return `${Math.floor(days / 365)}y`;
-	}
-
 	async function copyShortUrl(link: Link) {
 		try {
 			await navigator.clipboard.writeText(`${link.base_url}/${link.code}`);
@@ -98,7 +82,10 @@
 						<Skeleton class="h-4 w-40" />
 						<Skeleton class="h-3 w-64" />
 					</div>
-					<Skeleton class="h-4 w-12" />
+					<div class="flex items-center gap-4">
+						<Skeleton class="h-3 w-16" />
+						<Skeleton class="h-3 w-8" />
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -128,6 +115,7 @@
 								placeholder="Search codes, URLs, remarks"
 								class="pl-8"
 								aria-label="Search links"
+								name="search"
 							/>
 						</div>
 					{/if}
@@ -169,6 +157,12 @@
 									{/if}
 								</div>
 								<div class="flex items-center justify-between gap-4 md:justify-end">
+									<span
+										class="shrink-0 text-xs tabular-nums text-muted-foreground"
+										title="Visits over the link's lifetime"
+									>
+										{link.visits ?? 0} visits
+									</span>
 									<span
 										class="shrink-0 text-xs tabular-nums text-muted-foreground"
 										title={link.created_at.slice(0, 10)}

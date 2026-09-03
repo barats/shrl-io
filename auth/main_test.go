@@ -154,6 +154,13 @@ func TestCreateAndManageLink(t *testing.T) {
 	}
 	if rec := do(t, s, "GET", "/v1/links", key, nil); rec.Code != http.StatusOK {
 		t.Fatalf("list = %d", rec.Code)
+	} else {
+		// the list carries a per-link all-time visit total; none recorded here
+		var listed []map[string]any
+		decode(t, rec, &listed)
+		if len(listed) != 1 || listed[0]["visits"] != float64(0) {
+			t.Fatalf("list = %s, want one link with visits 0", rec.Body.String())
+		}
 	}
 	if rec := do(t, s, "PATCH", "/v1/links/"+l.Code, key, map[string]any{"destination": "https://new.example.com"}); rec.Code != http.StatusOK {
 		t.Fatalf("update = %d, body %s", rec.Code, rec.Body.String())

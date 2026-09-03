@@ -218,6 +218,30 @@ func (s *AnalyticsStore) GetBreakdowns(ctx context.Context, code, dimension stri
 	return totals, err
 }
 
+// LifetimeTotals returns the all-time visit total per code for a set of
+// codes; a code with no recorded visits is absent from the map.
+func (s *AnalyticsStore) LifetimeTotals(ctx context.Context, codes []string) (map[string]int64, error) {
+	if len(codes) == 0 {
+		return map[string]int64{}, nil
+	}
+	var rows []struct {
+		Code  string
+		Total int64
+	}
+	err := s.db.WithContext(ctx).Model(&domain.LifetimeStats{}).
+		Select("code, total_visits AS total").
+		Where("code IN ?", codes).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		out[r.Code] = r.Total
+	}
+	return out, nil
+}
+
 // LifetimeTotal returns the summed all-time visit total for a set of codes.
 func (s *AnalyticsStore) LifetimeTotal(ctx context.Context, codes []string) (int64, error) {
 	if len(codes) == 0 {

@@ -261,6 +261,22 @@ func (s *LinkService) ListTeamLinks(ctx context.Context, teamID int64) ([]domain
 	return s.links.ListByTeam(ctx, teamID)
 }
 
+// LifetimeVisits returns the all-time visit total per link code. An analytics
+// failure logs and returns an empty map so a list render never fails on
+// analytics; the caller renders absent codes as zero.
+func (s *LinkService) LifetimeVisits(ctx context.Context, links []domain.Link) map[string]int64 {
+	codes := make([]string, len(links))
+	for i, l := range links {
+		codes[i] = l.Code
+	}
+	totals, err := s.analytics.LifetimeTotals(ctx, codes)
+	if err != nil {
+		log.Printf("lifetime totals: %v", err)
+		return map[string]int64{}
+	}
+	return totals
+}
+
 // ListBaseURLs returns the Base URL Registry for the create-link select.
 func (s *LinkService) ListBaseURLs(ctx context.Context) ([]string, error) {
 	baseURLs, err := s.baseURLs.List(ctx)

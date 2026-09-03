@@ -370,11 +370,15 @@ func (s *server) linkJSON(r *http.Request, l *domain.Link) map[string]any {
 	return out
 }
 
-// writeLinks renders a Link list with ids mapped per linkJSON.
+// writeLinks renders a Link list with ids mapped per linkJSON and each
+// link's all-time visit total.
 func (s *server) writeLinks(w http.ResponseWriter, r *http.Request, links []domain.Link) {
+	visits := s.svc.LifetimeVisits(r.Context(), links)
 	items := make([]map[string]any, 0, len(links))
 	for i := range links {
-		items = append(items, s.linkJSON(r, &links[i]))
+		item := s.linkJSON(r, &links[i])
+		item["visits"] = visits[links[i].Code]
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, items)
 }
