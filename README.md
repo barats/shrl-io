@@ -13,6 +13,8 @@
 [![CI](https://github.com/barats/shrl-io/actions/workflows/ci.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/ci.yml)
 [![Release](https://github.com/barats/shrl-io/actions/workflows/release.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/barats/shrl-io)](https://github.com/barats/shrl-io/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![pre-1.0](https://img.shields.io/badge/status-pre--1.0-orange)](#security)
 
 </div>
 
@@ -135,7 +137,7 @@ teams and individuals who want full control over their link data.
 - **Teams**: create and delete Teams; deleting a Team reverts its Links to
   Personal.
 
-### Security
+### Security model
 
 - **Open-redirect protection**: only `http`/`https` Destinations are accepted;
   loopback, private, and link-local addresses are rejected at create/update
@@ -209,6 +211,12 @@ teams and individuals who want full control over their link data.
 
 ## Production
 
+> [!WARNING]
+> **Pre-1.0 software.** Treat deployments as beta: watch releases, pin a
+> version instead of `:latest` when surprises are expensive, and read the
+> release notes before upgrading. Security fixes land only in the latest
+> release — see [Security](#security).
+
 shrl.io publishes one image per service to ghcr.io, built for linux/amd64
 and linux/arm64:
 
@@ -243,6 +251,40 @@ Two first-run notes: the ghcr packages are created **private** — flip each
 to public in its package settings so anonymous `pull` works — and behind an
 HTTPS reverse proxy, set `SHRL_COOKIE_SECURE=true` and point
 `SHRL_DEFAULT_BASE_URL` at the redirector's public URL.
+
+## Security
+
+**shrl.io is pre-1.0.** The design is privacy-first and defensive, but the
+software is young: watch releases, keep deployments updated, and assume the
+security posture will keep hardening until 1.0.
+
+### Deploy with care
+
+- Serve the redirector and frontend behind an HTTPS reverse proxy and set
+  `SHRL_COOKIE_SECURE=true`.
+- Generate `SHRL_API_INTERNAL_SECRET` and `SHRL_SESSION_SECRET` with
+  `openssl rand -hex 32`; never reuse values from another deployment.
+- Keep PostgreSQL, Redis, and the Internal API off the public internet —
+  the production compose file publishes only the redirector (:8080), the
+  Auth API (:8083), and the frontend (:8082).
+- Rotate API Keys when a machine or script might have leaked them: keys
+  do not expire on their own (yet).
+- The first-run admin password is generated and printed once to the api
+  logs unless `SHRL_ADMIN_PASSWORD` is set; change it promptly.
+
+### Known limitations (pre-1.0)
+
+- API Keys never expire — rotate them manually when in doubt.
+- No two-factor authentication and no audit log yet.
+- Admins can read every Link on the instance, including Team Links.
+
+### Reporting a vulnerability
+
+Please do not open public issues. Use GitHub's private vulnerability
+reporting (the **Report a vulnerability** button under the **Security**
+tab) — see [`SECURITY.md`](SECURITY.md) for what to include and how fixes
+ship. The product's security design is described under
+[Security model](#security-model).
 
 ## Development
 
@@ -501,3 +543,7 @@ and the words to avoid.
 ## Documentation
 
 Architecture decision records (ADRs) live in [`docs/adr/`](docs/adr/).
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
