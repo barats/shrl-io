@@ -365,6 +365,8 @@ Visitor IPs are never stored, only the derived location.
 
 ## Configuration
 
+<!-- Canonical config reference. The same tables are mirrored at https://shrl.io/docs/config — update both when these change. -->
+
 All services are configured via environment variables. Each service reads its
 own set; variables shared across services (Postgres, Redis, retention) are
 listed per service so every section is self-contained.
@@ -554,7 +556,10 @@ and the words to avoid.
 
 ## Documentation
 
-Architecture decision records (ADRs) live in [`docs/adr/`](docs/adr/).
+- **Config reference** — every service's environment variables and production notes, mirrored at
+  [shrl.io/docs/config](https://shrl.io/docs/config) from the
+  [Configuration](#configuration) and [Production](#production) sections below.
+- Architecture decision records (ADRs) live in [`docs/adr/`](docs/adr/).
 
 ## License
 
