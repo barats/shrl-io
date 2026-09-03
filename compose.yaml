@@ -1,0 +1,135 @@
+# Production stack: pulls the published images from ghcr.io and runs the
+# complete shrl.io deployment. Copy this file to your server, export the two
+# required secrets, and run `podman compose up -d` (or docker compose).
+#
+# Required:
+#   SHRL_API_INTERNAL_SECRET  shared secret between the UI server and the
+#                             Internal API (generate: openssl rand -hex 32)
+#   SHRL_SESSION_SECRET       signs UI session cookies (same length advice)
+#
+# Optional:
+#   SHRL_ADMIN_PASSWORD       first-run admin password; when unset a random
+#                             value is generated and printed once to the api
+#                             service logs
+#   SHRL_DEFAULT_BASE_URL     public short-URL prefix; must match the
+#                             redirector's public URL (default
+#                             http://localhost:8080)
+#   SHRL_COOKIE_SECURE        set true behind an HTTPS reverse proxy
+#   SHRL_GEOLITE_LICENSE      MaxMind license key enabling location
+#                             attribution (locations report unknown without
+#                             it)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: shrl
+      POSTGRES_PASSWORD: shrl
+      POSTGRES_DB: shrl
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shrl -d shrl"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # The Internal API serves the UI only (ADR 0015): reachable on the compose
+  # network, never published to the host.
+  api:
+    image: ghcr.io/barats/shrl-io-api:latest
+    environment:
+      SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
+      SHRL_REDIS_ADDR: redis:6379
+      SHRL_API_INTERNAL_SECRET: ${SHRL_API_INTERNAL_SECRET:?export SHRL_API_INTERNAL_SECRET (openssl rand -hex 32)}
+      SHRL_ADMIN_USERNAME: ${SHRL_ADMIN_USERNAME:-admin}
+      SHRL_ADMIN_PASSWORD: ${SHRL_ADMIN_PASSWORD:-}
+      SHRL_DEFAULT_BASE_URL: ${SHRL_DEFAULT_BASE_URL:-http://localhost:8080}
+      SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
+      SHRL_API_ADDR: :8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  auth:
+    image: ghcr.io/barats/shrl-io-auth:latest
+    environment:
+      SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
+      SHRL_REDIS_ADDR: redis:6379
+      SHRL_DEFAULT_BASE_URL: ${SHRL_DEFAULT_BASE_URL:-http://localhost:8080}
+      SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
+      SHRL_AUTH_ADDR: :8080
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redirector:
+    image: ghcr.io/barats/shrl-io-redirect:latest
+    environment:
+      SHRL_REDIS_ADDR: redis:6379
+      SHRL_REDIRECTOR_ADDR: :8080
+      SHRL_REDIRECTOR_RATE_LIMIT_IP: ${SHRL_REDIRECTOR_RATE_LIMIT_IP:-600}
+      SHRL_REDIRECTOR_RATE_LIMIT_LINK: ${SHRL_REDIRECTOR_RATE_LIMIT_LINK:-3000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/barats/shrl-io-worker:latest
+    environment:
+      SHRL_DATABASE_URL: postgres://shrl:shrl@postgres:5432/shrl
+      SHRL_REDIS_ADDR: redis:6379
+      SHRL_RETENTION_DAYS: ${SHRL_RETENTION_DAYS:-365}
+      SHRL_GEOLITE_LICENSE: ${SHRL_GEOLITE_LICENSE:-}
+      SHRL_GEOLITE_DB_PATH: /data/GeoLite2-City.mmdb
+    volumes:
+      - geodata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/barats/shrl-io-frontend:latest
+    environment:
+      SHRL_API_URL: http://api:8080
+      SHRL_API_INTERNAL_SECRET: ${SHRL_API_INTERNAL_SECRET:?export SHRL_API_INTERNAL_SECRET (openssl rand -hex 32)}
+      SHRL_SESSION_SECRET: ${SHRL_SESSION_SECRET:?export SHRL_SESSION_SECRET (openssl rand -hex 32)}
+      SHRL_DEFAULT_BASE_URL: ${SHRL_DEFAULT_BASE_URL:-http://localhost:8080}
+      SHRL_COOKIE_SECURE: ${SHRL_COOKIE_SECURE:-false}
+    ports:
+      - "8082:3000"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  geodata:

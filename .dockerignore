@@ -1,0 +1,14 @@
+# The Go build needs only the module sources; everything else just slows the
+# context down (frontend/ alone drags in 177M of node_modules).
+.git
+.github
+bin
+docs
+frontend
+*.md
+dev.compose.yaml
+compose.yaml
+docker-bake.hcl
+.goreleaser.yaml
+Dockerfile
+.dockerignore

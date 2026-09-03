@@ -36,9 +36,9 @@ teams and individuals who want full control over their link data.
 - 📊 **Rich analytics**: visits, unique **Visitors**, daily time series, and
   breakdowns by referrer, device, OS, browser, country, region, city, and the
   six UTM parameters — with optional per-link forwarding to the Destination.
-- 🏠 **Simple to self-host**: one `podman compose -f dev.compose.yaml up --build`
-  brings up the whole stack; no external accounts required (GeoIP attribution
-  is optional).
+- 🏠 **Simple to self-host**: prebuilt images on ghcr.io and one
+  `podman compose up -d` bring up the whole stack; no external accounts
+  required (GeoIP attribution is optional).
 - 🖥️ **Built-in admin UI**: sign in with your account and manage Links from
   the browser, no curl required.
 - 🛡️ **Secure by default**: URL validation and open-redirect protection, plus
@@ -205,6 +205,43 @@ teams and individuals who want full control over their link data.
    lifetime, and breakdown rollups into PostgreSQL in a single transaction;
    stale rollups are pruned after the retention window.
 
+## Production
+
+shrl.io publishes one image per service to ghcr.io, built for linux/amd64
+and linux/arm64:
+
+| Image                               | Runs                            | Ports |
+|-------------------------------------|---------------------------------|-------|
+| `ghcr.io/barats/shrl-io-api`        | Internal API (UI-only)          | none, compose-network only |
+| `ghcr.io/barats/shrl-io-auth`       | Auth API for API Keys           | 8083  |
+| `ghcr.io/barats/shrl-io-redirect`   | Redirector                      | 8080  |
+| `ghcr.io/barats/shrl-io-worker`     | Analytics worker                | none  |
+| `ghcr.io/barats/shrl-io-frontend`   | UI server                       | 8082  |
+
+The `compose.yaml` in the repo root assembles the full stack: those five
+images plus PostgreSQL, Redis, and the GeoIP data volume. Copy it to your
+server, export the two required secrets, and start:
+
+    curl -O https://raw.githubusercontent.com/barats/shrl-io/main/compose.yaml
+    export SHRL_API_INTERNAL_SECRET="$(openssl rand -hex 32)"
+    export SHRL_SESSION_SECRET="$(openssl rand -hex 32)"
+    podman compose up -d
+
+Then sign in at http://localhost:8082 with the first-run **admin** account:
+`SHRL_ADMIN_PASSWORD` if you exported it, otherwise the generated value
+printed once to the api service logs.
+
+The compose file tracks the **latest** images, so
+`podman compose pull && podman compose up -d` upgrades to the newest
+release. To control when you upgrade, pin a release tag instead (e.g.
+`:0.1.0`); every release also tags its minor version (`:0.1`) and attaches
+linux/amd64 and arm64 archives of the Go services to the GitHub release.
+
+Two first-run notes: the ghcr packages are created **private** — flip each
+to public in its package settings so anonymous `pull` works — and behind an
+HTTPS reverse proxy, set `SHRL_COOKIE_SECURE=true` and point
+`SHRL_DEFAULT_BASE_URL` at the redirector's public URL.
+
 ## Development
 
 Prerequisites: Go 1.25+, podman (with podman-compose).
@@ -212,7 +249,7 @@ Prerequisites: Go 1.25+, podman (with podman-compose).
 ### Run the full stack
 
 `dev.compose.yaml` is the local development stack (it builds images from
-source). A production compose file that pulls prebuilt images is planned.
+source). For deployment from prebuilt images, see **Production** above.
 
     podman compose -f dev.compose.yaml up --build
 

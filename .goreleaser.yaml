@@ -1,0 +1,63 @@
+version: 2
+
+project_name: shrl-io
+
+# One archive per service, mirroring the per-service images: a binary-only
+# user downloads exactly the service they run. Linux only — the release story
+# is the compose stack and the ghcr images.
+builds:
+  - id: api
+    main: ./api
+    binary: api
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+  - id: auth
+    main: ./auth
+    binary: auth
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+  - id: redirector
+    main: ./redirector
+    binary: redirector
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+  - id: worker
+    main: ./worker
+    binary: worker
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+
+archives:
+  - id: api
+    ids: [api]
+    formats: [tar.gz]
+    name_template: shrl-io-api_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+  - id: auth
+    ids: [auth]
+    formats: [tar.gz]
+    name_template: shrl-io-auth_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+  - id: redirector
+    ids: [redirector]
+    formats: [tar.gz]
+    name_template: shrl-io-redirect_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+  - id: worker
+    ids: [worker]
+    formats: [tar.gz]
+    name_template: shrl-io-worker_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+changelog:
+  use: git
+  filters:
+    exclude:
+      - "^chore"
+      - "^docs"
+      - "^ci"
+      - "^test"
+      - "^Merge "
+
+release:
+  name_template: v{{ .Version }}
