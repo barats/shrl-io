@@ -259,9 +259,7 @@ release. To control when you upgrade, pin a release tag instead (e.g.
 `:0.1.0`); every release also tags its minor version (`:0.1`) and attaches
 linux/amd64 and arm64 archives of the Go services to the GitHub release.
 
-Two first-run notes: the ghcr packages are created **private** — flip each
-to public in its package settings so anonymous `pull` works — and behind an
-HTTPS reverse proxy, set `SHRL_COOKIE_SECURE=true` and point
+One first-run note: behind an HTTPS reverse proxy, set `SHRL_COOKIE_SECURE=true` and point
 `SHRL_DEFAULT_BASE_URL` at the redirector's public URL.
 
 ## Security
