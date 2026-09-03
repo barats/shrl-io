@@ -54,13 +54,10 @@ teams and individuals who want full control over their link data.
 
 <p align="center">
   <a href="https://github.com/barats/shrl-io/raw/main/docs/screenshots/dashboard.png">
-    <img src="docs/screenshots/dashboard.png" alt="Dashboard with a 14-day traffic chart, top links, sources, environment, location, and a world map of visitor countries" width="32%">
+    <img src="docs/screenshots/dashboard.png" alt="Dashboard with a 14-day traffic chart, top links, sources, environment, location, and a world map of visitor countries" width="28%">
   </a>
   <a href="https://github.com/barats/shrl-io/raw/main/docs/screenshots/link-detail.png">
-    <img src="docs/screenshots/link-detail.png" alt="Link detail with lifetime analytics, per-day chart, breakdowns, campaigns, and QR code" width="32%">
-  </a>
-  <a href="https://github.com/barats/shrl-io/raw/main/docs/screenshots/links.png">
-    <img src="docs/screenshots/links.png" alt="Links list with per-link lifetime visits, remarks, and relative dates" width="32%">
+    <img src="docs/screenshots/link-detail.png" alt="Link detail with lifetime analytics, per-day chart, breakdowns, campaigns, and QR code" width="28%">
   </a>
 </p>
 
