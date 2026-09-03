@@ -67,11 +67,8 @@ jobs:
       - id: meta
         run: |
           VERSION="${TAG#v}"
-          MINOR="${VERSION%.*}"
-          OWNER="${GITHUB_REPOSITORY_OWNER,,}" # ghcr requires lowercase
-          for svc in api auth redirect worker frontend; do
-            echo "${svc}_tags=ghcr.io/$OWNER/shrl-io-$svc:$VERSION,ghcr.io/$OWNER/shrl-io-$svc:$MINOR,ghcr.io/$OWNER/shrl-io-$svc:latest" >> "$GITHUB_OUTPUT"
-          done
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
 
       - uses: goreleaser/goreleaser-action@v7
         with:
@@ -88,16 +85,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Both Dockerfiles build for the build machine's native arch and
-      # cross-compile for arm64, so no QEMU is needed.
+      # cross-compile for arm64, so no QEMU is needed. Tags come from the
+      # VERSION/MINOR variables in docker-bake.hcl, overridden here via
+      # environment (bake's variable-override mechanism).
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/bake-action@v7
         with:
           files: docker-bake.hcl
           push: true
-          set: |
-            api.tags=${{ steps.meta.outputs.api_tags }}
-            auth.tags=${{ steps.meta.outputs.auth_tags }}
-            redirect.tags=${{ steps.meta.outputs.redirect_tags }}
-            worker.tags=${{ steps.meta.outputs.worker_tags }}
-            frontend.tags=${{ steps.meta.outputs.frontend_tags }}
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          MINOR: ${{ steps.meta.outputs.minor }}
