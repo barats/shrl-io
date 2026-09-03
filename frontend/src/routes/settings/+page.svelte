@@ -4,6 +4,7 @@
 	import type { User } from '$lib/types';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import SectionNav from '$lib/components/SectionNav.svelte';
+	import { relativeDate } from '$lib/utils';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -476,7 +477,9 @@
 											{/if}
 										</TableCell>
 										<TableCell class="text-muted-foreground">
-											{user.created_at.slice(0, 10)}
+											<span title={user.created_at.slice(0, 10)}>
+												{relativeDate(user.created_at)}
+											</span>
 										</TableCell>
 										<TableCell>
 											<span class="flex items-center justify-end gap-1">

@@ -6,6 +6,7 @@
 	import type { InviteCode, User } from '$lib/types';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import SectionNav from '$lib/components/SectionNav.svelte';
+	import { friendlyDate } from '$lib/utils';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -249,7 +250,7 @@
 				<CardHeader>
 					<CardTitle>Team profile</CardTitle>
 					<CardDescription>
-						Created {team?.created_at.slice(0, 10)} · {team?.members.length ?? 0}{' '}
+						Created {team ? friendlyDate(team.created_at) : ''} · {team?.members.length ?? 0}{' '}
 						{(team?.members.length ?? 0) === 1 ? 'member' : 'members'}
 					</CardDescription>
 				</CardHeader>
@@ -330,7 +331,7 @@
 									</span>
 									{#if !member.joined_at.startsWith('0001')}
 										<span class="text-xs text-muted-foreground">
-											Joined {member.joined_at.slice(0, 10)}
+											Joined {friendlyDate(member.joined_at)}
 										</span>
 									{/if}
 								</span>

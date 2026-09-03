@@ -18,6 +18,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { ChevronRight, KeyRound, Plus, TriangleAlert, Users } from '@lucide/svelte';
+	import { relativeDate } from '$lib/utils';
 
 	const isAdmin = $derived(page.data.user?.isAdmin ?? false);
 
@@ -156,8 +157,11 @@
 											{:else}
 												<Badge variant="secondary">Member</Badge>
 											{/if}
-											<span class="hidden text-xs text-muted-foreground sm:inline">
-												{team.created_at.slice(0, 10)}
+											<span
+												class="hidden text-xs text-muted-foreground sm:inline"
+												title={team.created_at.slice(0, 10)}
+											>
+												{relativeDate(team.created_at)}
 											</span>
 											<ChevronRight class="size-4 text-muted-foreground" />
 										</span>
@@ -193,8 +197,11 @@
 										</span>
 										<span class="min-w-0 flex-1 truncate font-medium">{team.name}</span>
 										<span class="flex shrink-0 items-center gap-3">
-											<span class="hidden text-xs text-muted-foreground sm:inline">
-												{team.created_at.slice(0, 10)}
+											<span
+												class="hidden text-xs text-muted-foreground sm:inline"
+												title={team.created_at.slice(0, 10)}
+											>
+												{relativeDate(team.created_at)}
 											</span>
 											<ChevronRight class="size-4 text-muted-foreground" />
 										</span>

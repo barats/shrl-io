@@ -4,6 +4,7 @@
 	import type { ApiKey, User } from '$lib/types';
 	import ConfirmDialog, { type ConfirmRequest } from '$lib/components/ConfirmDialog.svelte';
 	import SectionNav from '$lib/components/SectionNav.svelte';
+	import { friendlyDate, relativeDate } from '$lib/utils';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -180,7 +181,7 @@
 						<Badge>Admin</Badge>
 					{/if}
 				</div>
-				<p class="text-sm text-muted-foreground">Member since {me.created_at.slice(0, 10)}</p>
+				<p class="text-sm text-muted-foreground">Member since {friendlyDate(me.created_at)}</p>
 			</div>
 		</div>
 	{/if}
@@ -350,8 +351,10 @@
 											<TableRow>
 												<TableCell class="font-medium">{key.name}</TableCell>
 												<TableCell class="text-muted-foreground">
-													{key.created_at.slice(0, 10)}
-												</TableCell>
+												<span title={key.created_at.slice(0, 10)}>
+													{relativeDate(key.created_at)}
+												</span>
+											</TableCell>
 												<TableCell>
 													<Button
 														variant="ghost"

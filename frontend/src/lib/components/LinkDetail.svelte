@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
+	import { friendlyDate } from '$lib/utils';
 	import BreakdownDialog, {
 		type BreakdownSection
 	} from '$lib/components/BreakdownDialog.svelte';
@@ -480,7 +481,7 @@
 						{/if}
 					</div>
 					<p class="mt-2 text-sm text-muted-foreground">
-						Created {link.created_at.slice(0, 10)} · Updated {link.updated_at.slice(0, 10)}
+						Created {friendlyDate(link.created_at)} · Updated {friendlyDate(link.updated_at)}
 					</p>
 					{#if teamId && !canManage}
 						<p class="mt-1 text-sm text-muted-foreground">
