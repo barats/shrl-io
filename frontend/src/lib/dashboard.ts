@@ -56,25 +56,61 @@ export function presetLabel(preset: RangePreset): string {
 
 // bucketTimeseries collapses daily rows so long ranges stay readable: daily up
 // to 90 days, weekly up to a year, monthly beyond. Buckets keep the chart to
-// roughly 30–60 points.
+// roughly 30-60 points.
+//
+// The selected range renders in full, zeros included, so a quiet day reads as
+// an empty bar instead of a gap. Weekly and monthly buckets clamp the fill to
+// the first data point: years of guaranteed-empty leading buckets add noise,
+// not information.
 export function bucketTimeseries(rows: TimeseriesRow[], from: string, to: string): TimeseriesRow[] {
 	if (rows.length === 0) return rows;
+	// The backend swaps an inverted custom range; mirror that so the fill
+	// below always spans the data.
+	if (from > to) [from, to] = [to, from];
 	const spanDays = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000));
 	const bucket = spanDays <= 90 ? 'day' : spanDays <= 365 ? 'week' : 'month';
-	if (bucket === 'day') return rows;
+
+	const keyOf = (day: string) =>
+		bucket === 'day' ? day.slice(0, 10) : bucket === 'week' ? weekStart(day) : monthStart(day);
+	// Days inside one bucket accumulate (a week holds up to 7 daily rows).
+	const byKey = new Map<string, TimeseriesRow>();
+	for (const r of rows) {
+		const k = keyOf(r.day);
+		const acc = byKey.get(k);
+		if (acc) {
+			acc.visits += r.visits;
+			acc.unique_visitors += r.unique_visitors;
+		} else {
+			byKey.set(k, { code: '', day: k, visits: r.visits, unique_visitors: r.unique_visitors });
+		}
+	}
+
+	// Day buckets fill from the range start; longer buckets start at the
+	// first data point's bucket.
+	let key = bucket === 'day' ? from : keyOf(rows[0].day);
+	const step = bucket === 'day' ? 1 : bucket === 'week' ? 7 : 0;
 
 	const out: TimeseriesRow[] = [];
-	let current: TimeseriesRow | null = null;
-	for (const r of rows) {
-		const key = bucket === 'week' ? weekStart(r.day) : monthStart(r.day);
-		if (!current || current.day !== key) {
-			current = { code: '', day: key, visits: 0, unique_visitors: 0 };
-			out.push(current);
-		}
-		current.visits += r.visits;
-		current.unique_visitors += r.unique_visitors;
+	while (key <= to) {
+		const r = byKey.get(key);
+		out.push({ code: '', day: key, visits: r?.visits ?? 0, unique_visitors: r?.unique_visitors ?? 0 });
+		key = bucket === 'month' ? monthOffset(key) : dayOffset(key, step);
 	}
 	return out;
+}
+
+// dayOffset adds n days to a YYYY-MM-DD date, in UTC (the API's day unit).
+function dayOffset(day: string, n: number): string {
+	const d = new Date(day.slice(0, 10) + 'T00:00:00Z');
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+}
+
+// monthOffset advances a YYYY-MM-01 bucket by one month, clamped to day 01.
+function monthOffset(day: string): string {
+	const [y, m] = day.slice(0, 10).split('-').map(Number);
+	const d = new Date(Date.UTC(y, m, 1)); // m is 1-based; Date.UTC month is 0-based
+	return d.toISOString().slice(0, 10);
 }
 
 // weekStart returns the Monday of the week containing day, as YYYY-MM-DD.
