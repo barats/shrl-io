@@ -12,7 +12,6 @@
 
 [![CI](https://github.com/barats/shrl-io/actions/workflows/ci.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/ci.yml)
 [![Release](https://github.com/barats/shrl-io/actions/workflows/release.yml/badge.svg)](https://github.com/barats/shrl-io/actions/workflows/release.yml)
-[![Latest release](https://img.shields.io/github/v/release/barats/shrl-io)](https://github.com/barats/shrl-io/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![pre-1.0](https://img.shields.io/badge/status-pre--1.0-orange)](#security)
 
@@ -50,6 +49,22 @@ teams and individuals who want full control over their link data.
   (never published to the host); scripts and CI use the public Auth API with
   an API key, rate-limited per key and per IP, and the redirector rate-limits
   per IP and per Link.
+
+## Screenshots
+
+<p align="center">
+  <a href="https://github.com/barats/shrl-io/raw/main/docs/screenshots/dashboard.png">
+    <img src="docs/screenshots/dashboard.png" alt="Dashboard with a 14-day traffic chart, top links, sources, environment, location, and a world map of visitor countries" width="32%">
+  </a>
+  <a href="https://github.com/barats/shrl-io/raw/main/docs/screenshots/link-detail.png">
+    <img src="docs/screenshots/link-detail.png" alt="Link detail with lifetime analytics, per-day chart, breakdowns, campaigns, and QR code" width="32%">
+  </a>
+  <a href="https://github.com/barats/shrl-io/raw/main/docs/screenshots/links.png">
+    <img src="docs/screenshots/links.png" alt="Links list with per-link lifetime visits, remarks, and relative dates" width="32%">
+  </a>
+</p>
+
+<p align="center"><sub>Click a screenshot to open the full-size PNG.</sub></p>
 
 ## Features
 
