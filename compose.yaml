@@ -84,7 +84,7 @@ services:
     restart: unless-stopped
 
   redirector:
-    image: ghcr.io/barats/shrl-io-redirect:latest
+    image: ghcr.io/barats/shrl-io-redirector:latest
     environment:
       SHRL_REDIS_ADDR: redis:6379
       SHRL_REDIRECTOR_ADDR: :8080

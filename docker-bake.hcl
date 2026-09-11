@@ -29,7 +29,7 @@ function "tags" {
 }
 
 group "default" {
-  targets = ["api", "auth", "redirect", "worker", "frontend"]
+  targets = ["api", "auth", "redirector", "worker", "frontend"]
 }
 
 target "api" {
@@ -48,12 +48,12 @@ target "auth" {
   tags       = tags("shrl-io-auth")
 }
 
-target "redirect" {
+target "redirector" {
   context    = "."
   dockerfile = "Dockerfile"
   target     = "redirector"
   platforms  = ["linux/amd64", "linux/arm64"]
-  tags       = tags("shrl-io-redirect")
+  tags       = tags("shrl-io-redirector")
 }
 
 target "worker" {

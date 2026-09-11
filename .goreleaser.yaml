@@ -43,7 +43,7 @@ archives:
   - id: redirector
     ids: [redirector]
     formats: [tar.gz]
-    name_template: shrl-io-redirect_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    name_template: shrl-io-redirector_{{ .Version }}_{{ .Os }}_{{ .Arch }}
   - id: worker
     ids: [worker]
     formats: [tar.gz]

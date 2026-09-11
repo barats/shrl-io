@@ -236,7 +236,7 @@ and linux/arm64:
 |-------------------------------------|---------------------------------|-------|
 | `ghcr.io/barats/shrl-io-api`        | Internal API (UI-only)          | none, compose-network only |
 | `ghcr.io/barats/shrl-io-auth`       | Auth API for API Keys           | 8083  |
-| `ghcr.io/barats/shrl-io-redirect`   | Redirector                      | 8080  |
+| `ghcr.io/barats/shrl-io-redirector` | Redirector                      | 8080  |
 | `ghcr.io/barats/shrl-io-worker`     | Analytics worker                | none  |
 | `ghcr.io/barats/shrl-io-frontend`   | UI server                       | 8082  |
 
