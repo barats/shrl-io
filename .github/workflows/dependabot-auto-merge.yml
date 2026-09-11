@@ -1,0 +1,22 @@
+name: Dependabot auto-merge
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    # Dev-dependency bumps only: dependabot titles npm dev-dep PRs with
+    # "(deps-dev)". gomod ("build(deps):") and production-dep PRs are left
+    # for manual triage. The main branch requires the backend + frontend
+    # checks, so auto-merge only lands after CI passes.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && contains(github.event.pull_request.title, '(deps-dev)')
+    steps:
+      - name: Enable auto-merge for the dependabot PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

@@ -8,3 +8,13 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    # Dev-dependency patch/minor bumps collapse into one weekly PR; the
+    # auto-merge workflow targets these via the "(deps-dev)" title. Production
+    # deps and gomod updates stay individual and manual.
+    groups:
+      frontend-dev-deps:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - patch
+          - minor
