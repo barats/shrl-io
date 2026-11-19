@@ -36,7 +36,7 @@
 	"dependencies": {
 		"@types/d3-geo": "^3.1.1",
 		"@types/topojson-client": "^3.1.5",
-		"chart.js": "^4.5.1",
+		"chart.js": "^4.6.1",
 		"d3-geo": "^3.1.1",
 		"qrcode": "^1.5.4",
 		"topojson-client": "^3.1.0",
